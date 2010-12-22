@@ -9,3 +9,9 @@ to the general public under the GNU General Public License (GPL) either version
 2 of the License, or (at your option) any later version.
 
 Lingnu's web page is at http://www.lingnu.com
+
+Available tools:
+split_bootimg - a generic tool for splitting a boot image created using
+    mkbootimg. The tool auto-detects the actual (as opposed to reported) page
+    size, and dumps all relevant info about the boot image. The tool makes no
+    assumptions about the parameters used in order to create the boot image.
