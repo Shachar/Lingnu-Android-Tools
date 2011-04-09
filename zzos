@@ -1,0 +1,20 @@
+#!/usr/bin/perl
+
+use Getopt::Long;
+
+sub help
+{
+    print STDERR <<EOM;
+zzos [options] apk...
+
+Options:
+--framework     Given APK provides framework for this APK
+EOM
+    exit 1;
+}
+
+our(@framework_names);
+
+GetOptions("framework=s" => \@framework_names ) or help();
+
+print "@ARGV\n";
