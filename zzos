@@ -21,14 +21,53 @@ $outdir=".";
 
 GetOptions("framework=s" => \@framework_names, "output=s" => \$outdir ) or help();
 
-my $apkpath;
+my ($apkpath, $delayed_fail);
+$delayed_fail=0;
 while( $apkpath = shift @ARGV ) {
+    # For each APK to be processed
     my $fail=0;
     my ($apkname, $apkdir ) = fileparse( $apkpath, ( ".apk" ) );
 
-    if( !mkdir "$outdir/$apkname" ) {
-        print STDERR "Failed to create directory $outdir/$apkname: $!\n";
-        $fail=1;
+    if( $fail = process_apk( $apkpath, "$outdir/$apkname" ) ) {
+        $delayed_fail = 1;
+    }
+}
+
+exit $delayed_fail;
+
+sub process_apk
+{
+    my ( $apkpath, $outdir ) = @_;
+
+    # Get a list of files in the package
+    if( ! open( APKLIST, "-|", "aapt", ("l", $apkpath)) ) {
+        print STDERR "Failed to open $apkpath: $!\n";
+
+        return 1;
     }
 
+    if( !mkdir "$outdir" ) {
+        print STDERR "Failed to create directory $outdir: $!\n";
+        return 1;
+    }
+
+    my @ziplist;
+    print "Processing $apkpath\n";
+    # Scan all the files in the APK
+    while( <APKLIST> ) {
+        chomp;
+
+        if( m/^resources.arsc$/ ) {
+            # Do nothing. We handle this file through aapt dump resources.
+            print "Skipping resources.arsc\n";
+        } elsif( m'^.*\.xml$' ) {
+            print "Decompiling $_\n";
+        } else {
+            push @ziplist, $_;
+        }
+    }
+
+    system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir );
+
+    return 0;
 }
