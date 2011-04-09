@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
 use Getopt::Long;
+use File::Basename;
 
 sub help
 {
@@ -9,12 +10,25 @@ zzos [options] apk...
 
 Options:
 --framework     Given APK provides framework for this APK
+--output        directory where to create the extracted APK dirs. Default is current directory.
 EOM
     exit 1;
 }
 
-our(@framework_names);
+my (@framework_names, $outdir);
 
-GetOptions("framework=s" => \@framework_names ) or help();
+$outdir=".";
 
-print "@ARGV\n";
+GetOptions("framework=s" => \@framework_names, "output=s" => \$outdir ) or help();
+
+my $apkpath;
+while( $apkpath = shift @ARGV ) {
+    my $fail=0;
+    my ($apkname, $apkdir ) = fileparse( $apkpath, ( ".apk" ) );
+
+    if( !mkdir "$outdir/$apkname" ) {
+        print STDERR "Failed to create directory $outdir/$apkname: $!\n";
+        $fail=1;
+    }
+
+}
