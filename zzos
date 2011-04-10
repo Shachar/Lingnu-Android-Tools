@@ -2,7 +2,7 @@
 
 use Getopt::Long;
 use File::Basename;
-use File::Path;
+use File::Path qw(make_path);
 
 use feature "switch";
 
@@ -83,8 +83,10 @@ sub process_apk
 sub xml_decompile
 {
     my( $apkpath, $filename, $outdir ) = @_;
+    my $error;
 
-    if( !mkpath( dirname("$outdir/$filename") ) ) {
+    make_path( dirname("$outdir/$filename"), { error => \$error } );
+    if( @$error ) {
         print STDERR "Error creating ".dirname("$outdir/$filename").": $!\n";
 
         return 0;
@@ -94,8 +96,8 @@ sub xml_decompile
         print STDERR "Failed to dump XML tree $filename\n";
         return 0;
     }
-    if( ! open OUTFILE, ">", $outfile ) {
-        print STDERR "Failed to create XML file $outfile\n";
+    if( ! open OUTFILE, ">", "$outdir/$filename" ) {
+        print STDERR "Failed to create XML file $outdir/$filename: $!\n";
 
         close XMLFILE;
         return 0;
@@ -467,6 +469,13 @@ sub xml_decompile
     close OUTFILE;
 
     return 1;
+}
+
+sub reparse_attrib
+{
+    my ( $attrib, $val ) = @_;
+    print "reparse $attrib $val\n";
+    return undef;
 }
 
 # Convert all 32 bit values to signed 32 bit, regardless of whether our perl implementation is 32
