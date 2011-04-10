@@ -2,6 +2,9 @@
 
 use Getopt::Long;
 use File::Basename;
+use File::Path;
+
+use feature "switch";
 
 sub help
 {
@@ -51,6 +54,7 @@ sub process_apk
         return 1;
     }
 
+    # List of files to be unzipped as they are
     my @ziplist;
     print "Processing $apkpath\n";
     # Scan all the files in the APK
@@ -59,15 +63,420 @@ sub process_apk
 
         if( m/^resources.arsc$/ ) {
             # Do nothing. We handle this file through aapt dump resources.
-            print "Skipping resources.arsc\n";
         } elsif( m'^.*\.xml$' ) {
-            print "Decompiling $_\n";
+            if( !xml_decompile( $apkpath, $_, $outdir ) ) {
+                return 1;
+            }
         } else {
             push @ziplist, $_;
         }
     }
 
-    system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir );
+    close APKLIST;
+
+    # Extract all of the files that need simple extraction
+    system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir ) or return 1;
 
     return 0;
+}
+
+sub xml_decompile
+{
+    my( $apkpath, $filename, $outdir ) = @_;
+
+    if( !mkpath( dirname("$outdir/$filename") ) ) {
+        print STDERR "Error creating ".dirname("$outdir/$filename").": $!\n";
+
+        return 0;
+    }
+
+    if( !open XMLFILE, "-|", "aapt", ("d", "xmltree", $apkpath, $filename) ) {
+        print STDERR "Failed to dump XML tree $filename\n";
+        return 0;
+    }
+    if( ! open OUTFILE, ">", $outfile ) {
+        print STDERR "Failed to create XML file $outfile\n";
+
+        close XMLFILE;
+        return 0;
+    }
+
+    print OUTFILE '<?xml version="1.0" encoding="utf-8"?>'."\n";
+    my @elements=();
+    my @schemas;
+    my $current_level=-1;
+    my $element_open=0;
+    my $line_number=0;
+
+    while(<XMLFILE>) {
+        chomp;
+        $line_number++;
+        given ($_) {
+            when(/^( *)N: ([^=]+)=(.*)$/) {
+                local $new_level=length $1;
+                $new_level/=2;
+                local $firstline=1;
+                while( $current_level>=$new_level ) {
+                    # Close all pending open Elements
+                    if( $elements[$current_level] ) {
+                        print OUTFILE " "x($current_level*2) if !$firstline;
+
+                        if( $element_open ) {
+                            print OUTFILE " />\n";
+                            $element_open=0;
+                        } else {
+                            print OUTFILE "</$elements[$current_level]>\n";
+                        }
+                        $firstline=0;
+                    }
+                    --$current_level;
+                }
+
+                if( $element_open ) {
+                    # Close pending elements
+                    print OUTFILE ">\n";
+                    $element_open=0;
+                }
+
+                $new_level<=$current_level+1 or
+                        die("Jumped for level $current_level to $new_level in one go at $filename:$line_number");
+                $current_level=$new_level;
+                $elements[$new_level]="";
+                push( @schemas, "xmlns:$2=\"$3\"");
+            }
+            when(/^( *)E: ([^ ]+)/) {
+                # Element
+                local $new_level=length $1;
+                $new_level/=2;
+                local $firstline=1;
+                while( $current_level>=$new_level ) {
+                    # Close all pending open Elements
+                    if( $elements[$current_level] ) {
+                        print OUTFILE " "x($current_level*2) if !$firstline;
+
+                        if( $element_open ) {
+                            print OUTFILE " />\n";
+                            $element_open=0;
+                        } else {
+                            print OUTFILE "</$elements[$current_level]>\n";
+                        }
+                        $firstline=0;
+                    }
+                    --$current_level;
+                }
+                $nospace=0;
+
+                if( $element_open ) {
+                    # Close pending elements
+                    print OUTFILE ">\n";
+                    $element_open=0;
+                }
+
+                $new_level<=$current_level+1 or 
+                        die("Jumped for level $current_level to $new_level in one go at $filename:$line_number");
+
+                $current_level=$new_level;
+                $elements[$current_level]=$2;
+                print OUTFILE "$1<$2";
+                for( @schemas ) {
+                    print OUTFILE " $_";
+                }
+                @schemas=(); # Empty the array
+                        $element_open=1;
+            }
+            when(/^( *)A: ([^)]+)(\(0x[0-9a-f]+\))?=.*\(Raw: "(.*)"\)$/) {
+                # Attribute with value
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                print OUTFILE " $2=\"$4\"";
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x4\)0x(.*)$/) {
+                # Attribute Floating point
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=hex($3);
+                local $value=0.0;
+
+                # Zero is a special case in FP
+                if( $val!=0 ) {
+                    # 1 bit of sign, 8 bits of exponent, 23 bits of mantissa
+                    local $man=$val % 0x800000;
+                    $man/=2**23;
+                    $man+=1;
+
+                    $val>>=23;
+
+                    local $exp=$val % 0x100;
+                    $exp-=0x7f;
+                    $val>>=8;
+
+                    $value=$man*2**$exp;
+
+                    if( $val ) {
+                        $value= -$value;
+                    }
+                }
+                print OUTFILE " $2=\"$value\"";
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x5\)0x(.*)$/) {
+                # Attribute Dimension
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=signedhex($3);
+
+                # Extract the value type
+                local $value=$val/256;
+                $value+=0.5;
+                $value=floor($value);
+                local $unit;
+                given( $val & 0xff ) {
+                    when(0) { $unit='px'; }
+                    when(1) { $unit='dip'; }
+                    when(2) { $unit='sp'; }
+                    when(3) { $unit='pt'; }
+                    when(4) { $unit='in'; }
+                    when(5) { $unit='mm'; }
+                    default { print "$filename:$line_number: Unknown unit for type: \"$_\"\n"; }
+                }
+                print OUTFILE " $2=\"$value$unit\"";
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x6\)0x(.*)$/) {
+                # Attribute is a fraction
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                my $val=signedhex($3);
+
+                # 4 bit relation
+                my $relation=$val&0x7;
+                $val >>= 4;
+                # 4 bit fraction type
+                my $type=$val&0x7;
+                $val >>= 4;
+
+                # 23 bit mantissa
+                my $mantissa=$val&((1<<23)-1);
+                $val >>= 23;
+
+                # $val is zero if the number is positive
+                if( $val ) {
+                    # Number is negative - perform two's complement on it to turn it positive
+                    $mantissa ^= (1<<23)-1;
+                    $mantissa ++;
+                    $val="-";
+                } else {
+                    $val="";
+                }
+
+                given( $type ) {
+                    when( 0x0 ) {
+                        # Number is whole - do nothing
+                    }
+                    when( 0x1 ) {
+                        # 16 bit whole, 7 bit fraction
+                        $mantissa /= 2.0 ** 7;
+                    }
+                    when( 0x2 ) {
+                        # 8 bit whole, 15 bit fraction
+                        $mantissa /= 2.0 ** 15;
+                    }
+                    when( 0x3 ) {
+                        # 23 bits of fraction
+                        $mantissa /= 2.0 ** 23;
+                    }
+                    default {
+                        die "While parsing fraction type, unknown type $type at $filename:$line_number";
+                    }
+                }
+
+                $mantissa *= 100; # Turn it into percents
+
+                        given( $relation ) {
+                            when( 0 ) {
+                                $relation="";
+                            }
+                            when( 1 ) {
+                                $relation="p";
+                            }
+                            default {
+                                die "While parsing fraction type, unknown relation $relation at $filename:$line_number";
+                            }
+                        }
+
+                print OUTFILE " $2=\"$val$mantissa%$relation\"";
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x10\)0x(.*)$/) {
+                # Attribute decimal
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=reparse_attrib( $2, $3 );
+
+                if( !defined($val) ) {
+                    $val=signedhex($3);
+                }
+
+                print OUTFILE " $2=\"$val\"";
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x11\)0x(.*)$/) {
+                # Attribute Hexadecimal
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=reparse_attrib( $2, $3 );
+
+                if( !defined($val) ) {
+                    $val=hex($3);
+                    printf OUTFILE " $2=\"0x%x\"", $val;
+                } else {
+                    print OUTFILE " $2=\"$val\"";
+                }
+
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x12\)0x(.*)$/) {
+                # Attribute boolean
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=signedhex($3);
+                if( $val==0 ) {
+                    printf OUTFILE " $2=\"false\"";
+                } elsif( $val==-1 ) {
+                    printf OUTFILE " $2=\"true\"";
+                } else {
+                    print "$filename:$line_number: \"$_\"\n";
+                }
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1c\)0x(.*)$/) {
+                # Attribute Color ARGB8
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=hex($3);
+
+                printf OUTFILE (" $2=\"#%08x\"", $val);
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1d\)0x(.*)$/) {
+                # Attribute Color RGB8
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=hex($3);
+
+                # Mask out the Alpha channel
+                $val&=0x00ffffff;
+
+                printf OUTFILE (" $2=\"#%06x\"", $val);
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1e\)0x(.*)$/) {
+                # Attribute Color ARGB4
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=hex($3);
+
+                # Mask out the Alpha channel
+                local $value=0;
+
+                $val>>=4;
+                $value=$val&0xf;
+
+                $val>>=4;
+                $value|=$val&0xf0;
+
+                $val>>=4;
+                $value|=$val&0xf00;
+
+                $val>>=4;
+                $value|=$val&0xf000;
+
+                printf OUTFILE (" $2=\"#%04x\"", $value);
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1f\)0x(.*)$/) {
+                # Attribute Color RGB4
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $val=hex($3);
+
+                # Mask out the Alpha channel
+                local $value=0;
+
+                $val>>=4;
+                $value=$val&0xf;
+
+                $val>>=4;
+                $value|=$val&0xf0;
+
+                $val>>=4;
+                $value|=$val&0xf00;
+
+                printf OUTFILE (" $2=\"#%03x\"", $value);
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\@0x([0-9a-f]+)$/) {
+                # Attribute pointing at resource
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                local $res=hex($3);
+
+                exists( $references{$res} ) or
+                        die "Attribute points to resource 0x$3 which doesn't exist at $filename:$line_number";
+
+                print OUTFILE " $2=\"\@$references{$res}\"";
+            }
+            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\?0x([0-9a-f]+)$/) {
+                # Attribute pointing at resource
+                $element_open or die "Attribute with no open element at $filename:$line_number";
+
+                exists( $references{hex($3)} ) or die "Attribute points to resource 0x$3 which doesn't exist at $filename:$line_number";
+
+                print OUTFILE " $2=\"?$references{hex($3)}\"";
+            }
+            when(/^( *)C: "(.*)"$/) {
+                # Tag content
+                $element_open or die "Content with no open element at $filename:$line_number";
+
+                # Unescape the string, and escape it differently
+                my $content=$2;
+                $content=~s/\\n/\n/g;
+                $content=~s/\\t/\t/g;
+                $content=~s/\\\\/\\/g;
+                $content=~s/&/&amp;/g;
+
+                print OUTFILE ">$content";
+                $element_open=0;
+                $nospace=1;
+            }
+            when(/^Adding resources to ResTable:/) {
+                # Administrative messages
+            }
+            default {
+                die "Unknown line at $filename:$line_number: \"$_\"";
+            }
+        }
+    }
+
+    if( $element_open ) {
+        # Close pending elements
+        print OUTFILE ">\n";
+        $element_open=0;
+    }
+    while( $current_level>=0 ) {
+        # Close all pending open Elements
+        if( $elements[$current_level] ) {
+            print OUTFILE " "x($current_level*2) if !$nospace;
+            $nospace=0;
+            print OUTFILE "</$elements[$current_level]>\n";
+        }
+        --$current_level;
+    }
+
+    close XMLFILE;
+    close OUTFILE;
+
+    return 1;
+}
+
+# Convert all 32 bit values to signed 32 bit, regardless of whether our perl implementation is 32
+# or 64 bit.
+sub signedhex {
+    local $ret=hex(shift(@_));
+
+    if ($ret>=0x80000000) {
+        $ret-=0x100000000;
+    }
+
+    return $ret;
 }
