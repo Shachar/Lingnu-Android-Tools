@@ -6,6 +6,21 @@ use File::Path qw(make_path);
 
 use feature "switch";
 
+# Hashes for tracking the cross references
+my %references, %framework_references;
+my %references_flags, %framework_refrences_flags;
+
+$REF_PUBLIC=0x40000000;
+$REF_HARDCODE=0x80000000;
+$REF_INTERNAL=0x0000001;
+$REF_NOEXPORT=0x0000002;
+$REF_SPEC=    0x0000004;
+$REF_PLUS=    0x0000008;
+
+# Hard code null
+$framework_references{0}="null";
+$framework_references_flags{0}=$REF_PUBLIC|$REF_HARDCODE;
+
 sub help
 {
     print STDERR <<EOM;
@@ -42,13 +57,6 @@ sub process_apk
 {
     my ( $apkpath, $outdir ) = @_;
 
-    # Get a list of files in the package
-    if( ! open( APKLIST, "-|", "aapt", ("l", $apkpath)) ) {
-        print STDERR "Failed to open $apkpath: $!\n";
-
-        return 1;
-    }
-
     if( !mkdir "$outdir" ) {
         print STDERR "Failed to create directory $outdir: $!\n";
         return 1;
@@ -57,6 +65,18 @@ sub process_apk
     # List of files to be unzipped as they are
     my @ziplist;
     print "Processing $apkpath\n";
+
+    if( ! read_resources( $apkpath, $outdir ) ) {
+        return 1;
+    }
+
+    # Get a list of files in the package
+    if( ! open( APKLIST, "-|", "aapt", ("l", $apkpath)) ) {
+        print STDERR "Failed to open $apkpath: $!\n";
+
+        return 1;
+    }
+
     # Scan all the files in the APK
     while( <APKLIST> ) {
         chomp;
@@ -78,6 +98,73 @@ sub process_apk
     system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir ) or return 1;
 
     return 0;
+}
+
+sub read_resources
+{
+    my ( $apkpath, $outdir ) = @_;
+
+    # Inherit all of the framework references
+    %references = %framework_references;
+    %references_flags = %framework_references_flags;
+
+    open RESFILE, "-|", "aapt", ( "d", "resources", $apkpath ) or
+            die "Failed to extract resources";
+
+    while( <RESFILE> ) {
+        chomp;
+
+        my ($index, $package, $str);
+        my $flags=$REF_INTERNAL;
+
+        $index=undef;
+
+        if( m'Package Group \d+ id=\d+ packageCount=\d+ name=(.+)$' ) {
+            $package_name=$1;
+        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)" ) {
+            ($index, $package, $str)=( hex($2), $3, "$4/$5");
+
+            if( $1 ) {
+                $flags|=$REF_SPEC;
+            }
+
+            if( (hex($6)&0x40000000)!=0 ) {
+                $flags|=$REF_PUBLIC;
+            }
+        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): .* (\(PUBLIC\))" ) {
+            ($index, $package, $str)=( hex($2), $3, "$4/$5" );
+
+            if( $1 ) {
+                $flags|=$REF_SPEC;
+            }
+
+            if( $6 ) {
+                $flags|=$REF_PUBLIC;
+            }
+        }
+
+        if( $index ) {
+
+            if( exists( $references{$index} ) ) {
+                die "Reference 0x$2 refers once to $references{$index} and once to $str"
+                        if ($references{$index} ne $str);
+            } else {
+                if( $package ne $package_name ) {
+                    # An external symbol defined inside our package
+                    $flags|=$REF_NOEXPORT|$REF_PLUS;
+                    $str="+$package:$str";
+                }
+
+                $references{$index}=$str;
+
+                $references_flags{$index}=$flags;
+            }
+        }
+    }
+
+    close RESFILE;
+
+    return 1;
 }
 
 sub xml_decompile
