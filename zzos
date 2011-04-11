@@ -323,7 +323,8 @@ sub xml_decompile
                 $value+=0.5;
                 $value=floor($value);
                 local $unit;
-                given( $val & 0xff ) {
+                # Check which unit to use
+                given( $val & 0x0f ) {
                     when(0) { $unit='px'; }
                     when(1) { $unit='dip'; }
                     when(2) { $unit='sp'; }
@@ -331,6 +332,13 @@ sub xml_decompile
                     when(4) { $unit='in'; }
                     when(5) { $unit='mm'; }
                     default { print "$filename:$line_number: Unknown unit for type: \"$_\"\n"; }
+                }
+                # Check what split between fraction and whole
+                given( ($val & 0x30)>>4 ) {
+                    when(0) { };                        # Integer
+                    when(1) { $value/=128 };            # Fix point 7 bit shift
+                    when(2) { $value/=32768 };          # Fix point 15 bit shift
+                    when(3) { $value/=8,388,608 };      # Fix point 23 bit shift
                 }
                 print OUTFILE " $2=\"$value$unit\"";
             }
