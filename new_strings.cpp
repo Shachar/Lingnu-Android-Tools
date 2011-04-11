@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <fstream>
+#include <map>
 
 #include "expat.h"
 
@@ -11,15 +12,10 @@
 
 using namespace std;
 
-typedef struct string_entry_s {
-    char * name;
-    char * value;
-    struct string_entry_s * next;
-} string_entry;
-
 typedef struct {
     XML_Parser *parser;
-    string_entry *string_list;
+    map<string,string> strings;
+    string current_name;
 } parser_context;
 
 void tag_content(void *userData, const XML_Char *s, int len)
@@ -27,31 +23,33 @@ void tag_content(void *userData, const XML_Char *s, int len)
     char str[len+1];
     strncpy(str, s, len);
     str[len] = 0;
-    cout<<"content :"<<str<<endl;
+    parser_context* context = (parser_context*)userData;
+
+    if (context->current_name.size() > 0)
+	context->strings[context->current_name] = str;
 }
 
 void tag_start(void *userData, const XML_Char *name, const XML_Char **atts)
 {
-    cout<<"start "<<name<<endl;
+    parser_context* context = (parser_context*)userData;
     
     for (int idx=0; atts[idx] != NULL; idx+=2)
-	cout<<"attrs "<<atts[idx]<<" = "<<atts[idx+1]<<endl;
-
-    parser_context* context = (parser_context*)userData;
-
+	if (strcmp(atts[idx], "name") == 0) {
+	    context->current_name = atts[idx+1];
+	}
+    
     XML_SetCharacterDataHandler(*context->parser, tag_content);    
 }
 
 void tag_end(void *userData, const XML_Char *name)
 {
-    cout<<"end "<<name<<endl;
     parser_context* context = (parser_context*)userData;
 
     XML_SetCharacterDataHandler(*context->parser, NULL);
 }
 
 
-void parse_strings_xml(char* filename)
+void parse_strings_xml(char* filename, map<string, string>& string_map)
 {
     ifstream file(filename, ios::in); 
     
@@ -68,6 +66,7 @@ void parse_strings_xml(char* filename)
 
     parser_context context;
     context.parser = &p;
+    context.strings = string_map;
 
     XML_SetElementHandler(p, tag_start, tag_end);
     XML_SetUserData(p, &context);
@@ -83,11 +82,11 @@ void parse_strings_xml(char* filename)
 	
 	XML_Parse(p, buf, file.gcount(), file.eof());	
 	
-	if (file.eof())
+	if (file.eof()) {
+	    string_map = context.strings;
 	    break;
-    }	
-    
-    // p.    
+	}
+    }	    
 }
 
 
@@ -98,7 +97,24 @@ int main(int argc, char * argv[])
 	return 0;
     }
 
-    parse_strings_xml(argv[1]);
-	
+    cout<<"parsing "<<argv[1]<<endl;
+    map<string,string> old_strings_en;
+    parse_strings_xml(argv[1], old_strings_en);
+
+    cout<<"parsing "<<argv[2]<<endl;
+    map<string,string> new_strings_en;
+    parse_strings_xml(argv[2], old_strings_en);
+
+    cout<<"parsing "<<argv[3]<<endl;
+    map<string,string> old_strings_iw;
+    parse_strings_xml(argv[3], old_strings_en);
+
+/*    map<string, string>::iterator p;
+    
+    cout<<"Printing Strings.."<<endl;
+    for(p = old_strings_en.begin(); p != old_strings_en.end(); p++) {
+	cout << p->first << " = " << p->second << endl;
+	}	    */
+
     return 0;
 }
