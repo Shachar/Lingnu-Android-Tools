@@ -15,3 +15,7 @@ split_bootimg - a generic tool for splitting a boot image created using
     mkbootimg. The tool auto-detects the actual (as opposed to reported) page
     size, and dumps all relevant info about the boot image. The tool makes no
     assumptions about the parameters used in order to create the boot image.
+
+new_strings - will output new strings.xml based on old, new, and localized versions of 
+	      of strings.xml (reflects changes between the old and new version : 
+	      dropped, new, and modified string entries)
