@@ -10,13 +10,14 @@ use feature "switch";
 # Hashes for tracking the cross references
 my %references, %framework_references;
 my %references_flags, %framework_refrences_flags;
+my %attrib_bags;
 
-$REF_PUBLIC=0x40000000;
-$REF_HARDCODE=0x80000000;
-$REF_INTERNAL=0x0000001;
-$REF_NOEXPORT=0x0000002;
-$REF_SPEC=    0x0000004;
-$REF_PLUS=    0x0000008;
+$REF_PUBLIC=    0x40000000;
+$REF_HARDCODE=  0x80000000;
+$REF_INTERNAL=  0x00000001;
+$REF_NOEXPORT=  0x00000002;
+$REF_SPEC=      0x00000004;
+$REF_PLUS=      0x00000008;
 
 # Hard code null
 $framework_references{0}="null";
@@ -103,15 +104,18 @@ sub process_apk
 
 sub read_resources
 {
-    my ( $apkpath, $outdir ) = @_;
+    my ( $apkpath, $outdir, $framework ) = @_;
 
     # Inherit all of the framework references
     %references = %framework_references;
     %references_flags = %framework_references_flags;
 
-    open RESFILE, "-|", "aapt", ( "d", "resources", $apkpath ) or
+    open RESFILE, "-|", "aapt", ( "d", "--values", "resources", $apkpath ) or
             die "Failed to extract resources";
 
+    my $state=0;
+    my ($counter, $bag_index);
+    my %bag;
     while( <RESFILE> ) {
         chomp;
 
@@ -120,49 +124,92 @@ sub read_resources
 
         $index=undef;
 
-        if( m'Package Group \d+ id=\d+ packageCount=\d+ name=(.+)$' ) {
-            $package_name=$1;
-        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)" )
-        {
-            ($index, $package, $str)=( hex($2), $3, "$4/$5");
+        # The states are ordered so that if we decide to go out of a state, we have a chance to
+        # process the same line by different parts of the code. The result is slightly less
+        # readable order of states
+        if( $state == 2 ) {
+            # Inside bag
+            if( m'#(\d+) \(Key=0x([0-9a-f]{8})\): \(color\) #([0-9a-f]{8})' ) {
+                if( $1 != 0 ) {
+                    $bag{hex($2)}=hex($3);
+                }
 
-            if( $1 ) {
-                $flags|=$REF_SPEC;
+                $counter--;
+            } else {
+                die "Inside bag, got unparsable \"$_\"" if( $counter>0 );
             }
 
-            if( (hex($6)&0x40000000)!=0 ) {
-                $flags|=$REF_PUBLIC;
-            }
-        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): .* (\(PUBLIC\))" )
-        {
-            ($index, $package, $str)=( hex($2), $3, "$4/$5" );
-
-            if( $1 ) {
-                $flags|=$REF_SPEC;
-            }
-
-            if( $6 ) {
-                $flags|=$REF_PUBLIC;
+            if( $counter == 0 ) {
+                $state = 0;
+                $attrib_bags{$bag_index} = \%bag;
             }
         }
 
-        if( $index ) {
-
-            if( exists( $references{$index} ) ) {
-                die "Reference 0x$2 refers once to $references{$index} and once to $package:$str"
-                        if ($references{$index} ne "$package:$str");
+        if( $state == 1 ) {
+            # Start of bag
+            if( m'Parent=0x[0-9a-f]{8}, Count=(\d+)' ) {
+                $state = 2; # Cleanly inside the bag
+                $counter = sprintf "%d", $1;
+                %bag = {};
             } else {
-                if( $package ne $package_name ) {
-                    die sprintf "Reference 0x%08x to package %s is not of package %s",
-                        $index, $package, $package_name;
-                    # An external symbol defined inside our package
-                    $flags|=$REF_NOEXPORT|$REF_PLUS;
-                    $str="+$package:$str";
+                die "Line \"$_\" inside bag";
+                $state = 0;
+            }
+        }
+
+        if( $state == 0 ) {
+            # Base state - usual processing
+            if( m'Package Group \d+ id=\d+ packageCount=\d+ name=(.+)$' ) {
+                if( !$framework ) {
+                    # If this is not a framework APK read, set the package name
+                    $package_name=$1;
+                } else {
+                    $package_name=undef;
+                }
+            } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)" )
+            {
+                ($index, $package, $str)=( hex($2), $3, "$4/$5");
+
+                if( $1 ) {
+                    $flags|=$REF_SPEC;
                 }
 
-                $references{$index}="$package:$str";
+                if( (hex($6)&0x40000000)!=0 ) {
+                    $flags|=$REF_PUBLIC;
+                }
 
-                $references_flags{$index}=$flags;
+                if( exists( $references{$index} ) ) {
+                    die "Reference 0x$2 refers once to $references{$index} and once to $package:$str";
+                            # if ($references{$index} ne "$package:$str");
+                } else {
+                    if( $package eq $package_name ) {
+                        # An external symbol defined inside our package
+                        $flags|=$REF_NOEXPORT|$REF_PLUS;
+                        $str="$package:$str";
+                    }
+
+                    $references{$index}="$package:$str";
+
+                    $references_flags{$index}=$flags;
+                }
+            } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z\.]+):([^:/]+)/([^:]+): <bag>( \(PUBLIC\))?" )
+            {
+                ($index, $package, $type, $str)=( hex($2), $3, $4, $5 );
+
+                if( $1 ) {
+                    $flags|=$REF_SPEC;
+                }
+
+                if( $6 ) {
+                    $flags|=$REF_PUBLIC;
+                }
+
+                if( $type eq "attrib" ) {
+                    # We don't care about style bags
+                    $state=1; # Start of bag
+                    $bag_index = "$package:$str";
+                }
+            } else {
             }
         }
     }
@@ -574,7 +621,7 @@ sub xml_decompile
 sub reparse_attrib
 {
     my ( $attrib, $val ) = @_;
-    # print "reparse $attrib $val\n";
+    print "reparse $attrib $val\n";
     return undef;
 }
 
