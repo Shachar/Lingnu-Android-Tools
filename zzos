@@ -621,7 +621,14 @@ sub xml_decompile
 sub reparse_attrib
 {
     my ( $attrib, $val ) = @_;
+
+    # Is there anything to translate?
+    if( !exists( $attrib_bags{$attrib} ) ) {
+        return undef;
+    }
+
     print "reparse $attrib $val\n";
+
     return undef;
 }
 
