@@ -244,6 +244,8 @@ sub xml_decompile
         return 0;
     }
 
+    print "Processing $filename\n";
+
     print OUTFILE '<?xml version="1.0" encoding="utf-8"?>'."\n";
     my @elements=();
     my @schemas;
@@ -635,17 +637,14 @@ sub reparse_attrib
     my $bag = $attrib_bags{$attrib};
     my $zero = "";
 
-    printf "reparse_attrib $attrib $val %x ".printhash($bag)."\n", $rev;
     for( keys( %$bag ) ) {
         if( ($rev & $bag->{$_})==0 ) {
-            die sprintf("Invalid reference to 0x%08x", $_)
-                    if !exists( $references{$_} );
+            continue if !exists( $references{$_} );
             $references{$_} =~ '/(.*)$';
             if( ($data | $bag->{$_}) != $data ) {
                 $data |= $bag->{$_};
                 $ret .= "|" if length($ret)>0;
                 $ret .= $1;
-                printf "data 0x%08x added $_ ret $ret\n", $data;
             } elsif( $bag->{$_}==0 ) {
                 $zero = $1;
             }
