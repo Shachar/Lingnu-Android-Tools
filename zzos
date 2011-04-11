@@ -3,6 +3,7 @@
 use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
+use POSIX;
 
 use feature "switch";
 
@@ -121,7 +122,8 @@ sub read_resources
 
         if( m'Package Group \d+ id=\d+ packageCount=\d+ name=(.+)$' ) {
             $package_name=$1;
-        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)" ) {
+        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)" )
+        {
             ($index, $package, $str)=( hex($2), $3, "$4/$5");
 
             if( $1 ) {
@@ -131,7 +133,8 @@ sub read_resources
             if( (hex($6)&0x40000000)!=0 ) {
                 $flags|=$REF_PUBLIC;
             }
-        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): .* (\(PUBLIC\))" ) {
+        } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): .* (\(PUBLIC\))" )
+        {
             ($index, $package, $str)=( hex($2), $3, "$4/$5" );
 
             if( $1 ) {
@@ -146,16 +149,18 @@ sub read_resources
         if( $index ) {
 
             if( exists( $references{$index} ) ) {
-                die "Reference 0x$2 refers once to $references{$index} and once to $str"
-                        if ($references{$index} ne $str);
+                die "Reference 0x$2 refers once to $references{$index} and once to $package:$str"
+                        if ($references{$index} ne "$package:$str");
             } else {
                 if( $package ne $package_name ) {
+                    die sprintf "Reference 0x%08x to package %s is not of package %s",
+                        $index, $package, $package_name;
                     # An external symbol defined inside our package
                     $flags|=$REF_NOEXPORT|$REF_PLUS;
                     $str="+$package:$str";
                 }
 
-                $references{$index}=$str;
+                $references{$index}="$package:$str";
 
                 $references_flags{$index}=$flags;
             }
@@ -561,7 +566,7 @@ sub xml_decompile
 sub reparse_attrib
 {
     my ( $attrib, $val ) = @_;
-    print "reparse $attrib $val\n";
+    # print "reparse $attrib $val\n";
     return undef;
 }
 
