@@ -115,7 +115,7 @@ sub read_resources
 
     my $state=0;
     my ($counter, $bag_index);
-    my %bag;
+    my $bag;
     while( <RESFILE> ) {
         chomp;
 
@@ -131,7 +131,7 @@ sub read_resources
             # Inside bag
             if( m'#(\d+) \(Key=0x([0-9a-f]{8})\): \(color\) #([0-9a-f]{8})' ) {
                 if( $1 != 0 ) {
-                    $bag{hex($2)}=hex($3);
+                    $bag->{hex($2)}=hex($3);
                 }
 
                 $counter--;
@@ -141,7 +141,9 @@ sub read_resources
 
             if( $counter == 0 ) {
                 $state = 0;
-                $attrib_bags{$bag_index} = \%bag;
+                if( scalar keys %$bag ) {
+                    $attrib_bags{$bag_index} = $bag;
+                }
             }
         }
 
@@ -150,7 +152,7 @@ sub read_resources
             if( m'Parent=0x[0-9a-f]{8}, Count=(\d+)' ) {
                 $state = 2; # Cleanly inside the bag
                 $counter = sprintf "%d", $1;
-                %bag = {};
+                $bag = {};
             } else {
                 die "Line \"$_\" inside bag";
                 $state = 0;
@@ -204,7 +206,7 @@ sub read_resources
                     $flags|=$REF_PUBLIC;
                 }
 
-                if( $type eq "attrib" ) {
+                if( $type eq "attr" ) {
                     # We don't care about style bags
                     $state=1; # Start of bag
                     $bag_index = "$package:$str";
@@ -621,15 +623,41 @@ sub xml_decompile
 sub reparse_attrib
 {
     my ( $attrib, $val ) = @_;
+    $val = $val * 1;
 
     # Is there anything to translate?
     if( !exists( $attrib_bags{$attrib} ) ) {
         return undef;
     }
 
-    print "reparse $attrib $val\n";
+    my ($ret, $data, $zero )=("", 0, "");
+    my $rev = ~$val;
+    my $bag = $attrib_bags{$attrib};
+    my $zero = "";
 
-    return undef;
+    printf "reparse_attrib $attrib $val %x ".printhash($bag)."\n", $rev;
+    for( keys( %$bag ) ) {
+        if( ($rev & $bag->{$_})==0 ) {
+            die sprintf("Invalid reference to 0x%08x", $_)
+                    if !exists( $references{$_} );
+            $references{$_} =~ '/(.*)$';
+            if( ($data | $bag->{$_}) != $data ) {
+                $data |= $bag->{$_};
+                $ret .= "|" if length($ret)>0;
+                $ret .= $1;
+                printf "data 0x%08x added $_ ret $ret\n", $data;
+            } elsif( $bag->{$_}==0 ) {
+                $zero = $1;
+            }
+        }
+
+        last if( $data!=0 && $data==$val ); # We are done anyways
+    }
+
+    return $zero if $val==0 && $zero;
+    return undef if $val!=$data;
+
+    return $ret;
 }
 
 # Convert all 32 bit values to signed 32 bit, regardless of whether our perl implementation is 32
@@ -640,6 +668,19 @@ sub signedhex {
     if ($ret>=0x80000000) {
         $ret-=0x100000000;
     }
+
+    return $ret;
+}
+
+sub printhash {
+    my ($hash) = @_;
+
+    my $ret="{ ";
+    for ( keys( %$hash ) ) {
+        $ret .= $_."=>".$$hash{$_}." ";
+    }
+
+    $ret.="}";
 
     return $ret;
 }
