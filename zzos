@@ -333,7 +333,7 @@ sub xml_decompile
                 # Attribute with value
                 $element_open or die "Attribute with no open element at $filename:$line_number";
 
-                print OUTFILE " $2=\"$4\"";
+                print OUTFILE "\n$1  $2=\"$4\"";
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x4\)0x(.*)$/) {
                 # Attribute Floating point
@@ -361,7 +361,7 @@ sub xml_decompile
                         $value= -$value;
                     }
                 }
-                print OUTFILE " $2=\"$value\"";
+                print OUTFILE "\n$1  $2=\"$value\"";
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x5\)0x(.*)$/) {
                 # Attribute Dimension
@@ -391,7 +391,7 @@ sub xml_decompile
                     when(2) { $value/=32768 };          # Fix point 15 bit shift
                     when(3) { $value/=8,388,608 };      # Fix point 23 bit shift
                 }
-                print OUTFILE " $2=\"$value$unit\"";
+                print OUTFILE "\n$1  $2=\"$value$unit\"";
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x6\)0x(.*)$/) {
                 # Attribute is a fraction
@@ -455,7 +455,7 @@ sub xml_decompile
                             }
                         }
 
-                print OUTFILE " $2=\"$val$mantissa%$relation\"";
+                print OUTFILE "\n$1  $2=\"$val$mantissa%$relation\"";
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x10\)0x(.*)$/) {
                 # Attribute decimal
@@ -467,7 +467,7 @@ sub xml_decompile
                     $val=signedhex($3);
                 }
 
-                print OUTFILE " $2=\"$val\"";
+                print OUTFILE "\n$1  $2=\"$val\"";
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x11\)0x(.*)$/) {
                 # Attribute Hexadecimal
@@ -477,9 +477,9 @@ sub xml_decompile
 
                 if( !defined($val) ) {
                     $val=hex($3);
-                    printf OUTFILE " $2=\"0x%x\"", $val;
+                    printf OUTFILE "\n$1  $2=\"0x%x\"", $val;
                 } else {
-                    print OUTFILE " $2=\"$val\"";
+                    print OUTFILE "\n$1  $2=\"$val\"";
                 }
 
             }
@@ -489,11 +489,11 @@ sub xml_decompile
 
                 local $val=signedhex($3);
                 if( $val==0 ) {
-                    printf OUTFILE " $2=\"false\"";
+                    printf OUTFILE "\n$1  $2=\"false\"";
                 } elsif( $val==-1 ) {
-                    printf OUTFILE " $2=\"true\"";
+                    printf OUTFILE "\n$1  $2=\"true\"";
                 } else {
-                    print "$filename:$line_number: \"$_\"\n";
+                    die "$filename:$line_number: \"$_\"\n";
                 }
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1c\)0x(.*)$/) {
@@ -502,7 +502,7 @@ sub xml_decompile
 
                 local $val=hex($3);
 
-                printf OUTFILE (" $2=\"#%08x\"", $val);
+                printf OUTFILE ("\n$1  $2=\"#%08x\"", $val);
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1d\)0x(.*)$/) {
                 # Attribute Color RGB8
@@ -513,7 +513,7 @@ sub xml_decompile
                 # Mask out the Alpha channel
                 $val&=0x00ffffff;
 
-                printf OUTFILE (" $2=\"#%06x\"", $val);
+                printf OUTFILE ("\n$1  $2=\"#%06x\"", $val);
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1e\)0x(.*)$/) {
                 # Attribute Color ARGB4
@@ -536,7 +536,7 @@ sub xml_decompile
                 $val>>=4;
                 $value|=$val&0xf000;
 
-                printf OUTFILE (" $2=\"#%04x\"", $value);
+                printf OUTFILE ("\n$1  $2=\"#%04x\"", $value);
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1f\)0x(.*)$/) {
                 # Attribute Color RGB4
@@ -556,7 +556,7 @@ sub xml_decompile
                 $val>>=4;
                 $value|=$val&0xf00;
 
-                printf OUTFILE (" $2=\"#%03x\"", $value);
+                printf OUTFILE ("\n$1  $2=\"#%03x\"", $value);
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\@0x([0-9a-f]+)$/) {
                 # Attribute pointing at resource
@@ -567,7 +567,7 @@ sub xml_decompile
                 exists( $references{$res} ) or
                         die "Attribute points to resource 0x$3 which doesn't exist at $filename:$line_number";
 
-                print OUTFILE " $2=\"\@$references{$res}\"";
+                print OUTFILE "\n$1  $2=\"\@$references{$res}\"";
             }
             when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\?0x([0-9a-f]+)$/) {
                 # Attribute pointing at resource
@@ -575,7 +575,7 @@ sub xml_decompile
 
                 exists( $references{hex($3)} ) or die "Attribute points to resource 0x$3 which doesn't exist at $filename:$line_number";
 
-                print OUTFILE " $2=\"?$references{hex($3)}\"";
+                print OUTFILE "\n$1  $2=\"?$references{hex($3)}\"";
             }
             when(/^( *)C: "(.*)"$/) {
                 # Tag content
