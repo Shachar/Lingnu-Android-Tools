@@ -38,7 +38,7 @@ void tag_start(void *userData, const XML_Char *name, const XML_Char **atts)
 	if (strcmp(atts[idx], "name") == 0) 
 	    context->current_name = atts[idx+1];
 	else if ((strcmp(atts[idx], "translatable") == 0) &&
-		 (strcmp(atts[idx], "false") == 0))
+		 (strcmp(atts[idx+1], "false") == 0))
 	    return;  // ignore not translatable strings
     
     XML_SetCharacterDataHandler(*context->parser, tag_content);    
@@ -151,10 +151,12 @@ int main(int argc, char * argv[])
 	if (diff_op == DELETED)
 	    continue;
 
-	cout << "<string name=\""<<p->first<<"\">";
+	cout << "<string name=\""<<p->first<<"\"";
 
 	if (diff_op == MODIFIED)
-	    cout<<"MODIFIED : ";	
+	    cout<<" MODIFIED";
+
+	cout<<">";
 	
 	cout<<p->second<<"</string>"<<endl;
     }
@@ -162,7 +164,7 @@ int main(int argc, char * argv[])
     map<string, diff_operation>::iterator p_diff;
     for(p_diff = diff_old_new.begin(); p_diff != diff_old_new.end(); p_diff++)
 	if (p_diff->second == ADDED)
-	    cout << "<string name=\""<<p_diff->first<<"\">"<<"NEW"<<"</string>"<<endl;
+	    cout << "<string name=\""<<p_diff->first<<"\" NEW"<<">"<<"</string>"<<endl;
     
     cout<<"</resources>"<<endl;
     return 0;
