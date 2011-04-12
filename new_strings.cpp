@@ -35,9 +35,11 @@ void tag_start(void *userData, const XML_Char *name, const XML_Char **atts)
     parser_context* context = (parser_context*)userData;
     
     for (int idx=0; atts[idx] != NULL; idx+=2)
-	if (strcmp(atts[idx], "name") == 0) {
+	if (strcmp(atts[idx], "name") == 0) 
 	    context->current_name = atts[idx+1];
-	}
+	else if ((strcmp(atts[idx], "translatable") == 0) &&
+		 (strcmp(atts[idx], "false") == 0))
+	    return;  // ignore not translatable strings
     
     XML_SetCharacterDataHandler(*context->parser, tag_content);    
 }
