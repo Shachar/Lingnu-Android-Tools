@@ -40,6 +40,11 @@ void tag_start(void *userData, const XML_Char *name, const XML_Char **atts)
 	else if ((strcmp(atts[idx], "translatable") == 0) &&
 		 (strcmp(atts[idx+1], "false") == 0))
 	    return;  // ignore not translatable strings
+	else 
+	    {
+		cerr<<"unknown attribute '"<<atts[idx]<<"' for element <string>"<<endl;
+		exit(1);
+	    }
     
     XML_SetCharacterDataHandler(*context->parser, tag_content);    
 }
