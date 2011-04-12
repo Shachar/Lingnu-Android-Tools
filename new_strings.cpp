@@ -111,34 +111,54 @@ void diff(map<string,string>& base, map<string,string>& other, map<string,diff_o
 
 }
 
-int main(int argc, char * argv[])
+int merge2(char * old_strings_iw_file, char * new_strings_iw_file)
 {
-    if (argc != 4) {
-	cout<<"usage : "<<argv[0]<<" old_strings_en new_strings_en old_string_iw"<<endl;
-	return 0;
-    }
-
     // parse
-
-    cout<<"parsing "<<argv[1]<<endl;
-    map<string,string> old_strings_en;
-    parse_strings_xml(argv[1], old_strings_en);
-
-    cout<<"parsing "<<argv[2]<<endl;
-    map<string,string> new_strings_en;
-    parse_strings_xml(argv[2], new_strings_en);
-
-    cout<<"parsing "<<argv[3]<<endl;
     map<string,string> old_strings_iw;
-    parse_strings_xml(argv[3], old_strings_iw);
+    parse_strings_xml(old_strings_iw_file, old_strings_iw);
+
+    map<string,string> new_strings_iw;
+    parse_strings_xml(new_strings_iw_file, new_strings_iw);
+
+    // output    
+    cout<<"<?xml version=\"1.0\" encoding=\"utf-8\"?>"<<endl;
+    cout<<"<resources>"<<endl;
+
+    map<string, string>::iterator p;
+    for(p = old_strings_iw.begin(); p != old_strings_iw.end(); p++) {
+	
+	if ( new_strings_iw.find(p->first) != new_strings_iw.end() ) {
+	    cout<<"<string name=\""<<p->first<<"\">"<<new_strings_iw[p->first]<<"</string>"<<endl;
+	    new_strings_iw.erase(p->first);
+	} else
+	    cout<<"<string name=\""<<p->first<<"\">"<<p->second<<"</string>"<<endl;	    
+    }    
+    
+    for(p = new_strings_iw.begin(); p != new_strings_iw.end(); p++)
+	cout<<"<string name=\""<<p->first<<"\">"<<p->second<<"</string>"<<endl;
+
+    cout<<"</resources>"<<endl;
+
+    return 0;
+}
+
+int merge3(char * old_strings_en_file, char * new_strings_en_file, char * old_strings_iw_file)
+{
+    // parse
+    map<string,string> old_strings_en;
+    parse_strings_xml(old_strings_en_file, old_strings_en);
+
+    map<string,string> new_strings_en;
+    parse_strings_xml(new_strings_en_file, new_strings_en);
+
+    map<string,string> old_strings_iw;
+    parse_strings_xml(old_strings_iw_file, old_strings_iw);
 
     // diff
-
     map<string,diff_operation> diff_old_new;
     diff(old_strings_en, new_strings_en, diff_old_new);
 
-    // output
-    
+    // output    
     cout<<"<?xml version=\"1.0\" encoding=\"utf-8\"?>"<<endl;
     cout<<"<resources>"<<endl;
 
@@ -167,5 +187,24 @@ int main(int argc, char * argv[])
 	    cout << "<string name=\""<<p_diff->first<<"\" NEW"<<">"<<"</string>"<<endl;
     
     cout<<"</resources>"<<endl;
+
     return 0;
+}
+
+void usage(char * progname)
+{
+    cout<<"usage : "<<progname<<" old_strings_en new_strings_en old_string_iw"<<endl;
+    cout<<"        "<<progname<<" old_string_iw new_strings_iw"<<endl;
+    exit(0);
+}
+
+int main(int argc, char * argv[])
+{
+    if ((argc < 3) || (argc > 4))
+	usage(argv[0]);
+
+    if (argc == 3)
+	return merge2(argv[1], argv[2]);
+    
+    return merge3(argv[1], argv[2], argv[3]);
 }

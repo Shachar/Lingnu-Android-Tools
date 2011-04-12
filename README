@@ -16,6 +16,12 @@ split_bootimg - a generic tool for splitting a boot image created using
     size, and dumps all relevant info about the boot image. The tool makes no
     assumptions about the parameters used in order to create the boot image.
 
-new_strings - will output new strings.xml based on old, new, and localized versions of 
-	      of strings.xml (reflects changes between the old and new version : 
-	      dropped, new, and modified string entries)
+new_strings - has 2 functions:
+    + given 3 files : old_english_strings.xml newer_english_strings.xml localized_strings.xml
+      will output new localized  strings.xml based on old, new, and localized versions of 
+      of strings.xml (reflects changes between the old and new version :  dropped, new
+      and modified string entries)
+      
+    + given 2 files : old_localized_strings.xml newer_localized_strings.xml
+      will output merged version of the 2 files, prefering newer string entries
+      if exists.
