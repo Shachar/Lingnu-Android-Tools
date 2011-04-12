@@ -639,14 +639,15 @@ sub reparse_attrib
 
     for( keys( %$bag ) ) {
         if( ($rev & $bag->{$_})==0 ) {
-            continue if !exists( $references{$_} );
-            $references{$_} =~ '/(.*)$';
-            if( ($data | $bag->{$_}) != $data ) {
-                $data |= $bag->{$_};
-                $ret .= "|" if length($ret)>0;
-                $ret .= $1;
-            } elsif( $bag->{$_}==0 ) {
-                $zero = $1;
+            if( exists( $references{$_} ) ) {
+                $references{$_} =~ '/(.*)$';
+                if( ($data | $bag->{$_}) != $data ) {
+                    $data |= $bag->{$_};
+                    $ret .= "|" if length($ret)>0;
+                    $ret .= $1;
+                } elsif( $bag->{$_}==0 ) {
+                    $zero = $1;
+                }
             }
         }
 
