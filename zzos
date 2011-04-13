@@ -184,10 +184,10 @@ sub read_resources
                     die "Reference 0x$2 refers once to $references{$index} and once to $package:$str";
                             # if ($references{$index} ne "$package:$str");
                 } else {
-                    if( $package eq $package_name ) {
+                    if( $package ne $package_name ) {
                         # An external symbol defined inside our package
                         $flags|=$REF_NOEXPORT|$REF_PLUS;
-                        $str="$package:$str";
+                        # $str="$package:$str";
                     }
 
                     $references{$index}="$package:$str";
