@@ -329,253 +329,14 @@ sub xml_decompile
                 @schemas=(); # Empty the array
                         $element_open=1;
             }
-            when(/^( *)A: ([^)]+)(\(0x[0-9a-f]+\))?=.*\(Raw: "(.*)"\)$/) {
+            when(/^( *)A: ([^)]+)(\(0x[0-9a-f]+\))?=(.*)$/) {
+                # An attribute - we need to parse to find out which
                 # Attribute with value
                 $element_open or die "Attribute with no open element at $filename:$line_number";
 
-                print OUTFILE "\n$1  $2=\"$4\"";
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x4\)0x(.*)$/) {
-                # Attribute Floating point
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=hex($3);
-                local $value=0.0;
-
-                # Zero is a special case in FP
-                if( $val!=0 ) {
-                    # 1 bit of sign, 8 bits of exponent, 23 bits of mantissa
-                    local $man=$val % 0x800000;
-                    $man/=2**23;
-                    $man+=1;
-
-                    $val>>=23;
-
-                    local $exp=$val % 0x100;
-                    $exp-=0x7f;
-                    $val>>=8;
-
-                    $value=$man*2**$exp;
-
-                    if( $val ) {
-                        $value= -$value;
-                    }
-                }
-                print OUTFILE "\n$1  $2=\"$value\"";
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x5\)0x(.*)$/) {
-                # Attribute Dimension
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=signedhex($3);
-
-                # Extract the value type
-                local $value=$val/256;
-                $value+=0.5;
-                $value=floor($value);
-                local $unit;
-                # Check which unit to use
-                given( $val & 0x0f ) {
-                    when(0) { $unit='px'; }
-                    when(1) { $unit='dip'; }
-                    when(2) { $unit='sp'; }
-                    when(3) { $unit='pt'; }
-                    when(4) { $unit='in'; }
-                    when(5) { $unit='mm'; }
-                    default { print "$filename:$line_number: Unknown unit for type: \"$_\"\n"; }
-                }
-                # Check what split between fraction and whole
-                given( ($val & 0x30)>>4 ) {
-                    when(0) { };                        # Integer
-                    when(1) { $value/=128 };            # Fix point 7 bit shift
-                    when(2) { $value/=32768 };          # Fix point 15 bit shift
-                    when(3) { $value/=8,388,608 };      # Fix point 23 bit shift
-                }
-                print OUTFILE "\n$1  $2=\"$value$unit\"";
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x6\)0x(.*)$/) {
-                # Attribute is a fraction
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                my $val=signedhex($3);
-
-                # 4 bit relation
-                my $relation=$val&0x7;
-                $val >>= 4;
-                # 4 bit fraction type
-                my $type=$val&0x7;
-                $val >>= 4;
-
-                # 23 bit mantissa
-                my $mantissa=$val&((1<<23)-1);
-                $val >>= 23;
-
-                # $val is zero if the number is positive
-                if( $val ) {
-                    # Number is negative - perform two's complement on it to turn it positive
-                    $mantissa ^= (1<<23)-1;
-                    $mantissa ++;
-                    $val="-";
-                } else {
-                    $val="";
-                }
-
-                given( $type ) {
-                    when( 0x0 ) {
-                        # Number is whole - do nothing
-                    }
-                    when( 0x1 ) {
-                        # 16 bit whole, 7 bit fraction
-                        $mantissa /= 2.0 ** 7;
-                    }
-                    when( 0x2 ) {
-                        # 8 bit whole, 15 bit fraction
-                        $mantissa /= 2.0 ** 15;
-                    }
-                    when( 0x3 ) {
-                        # 23 bits of fraction
-                        $mantissa /= 2.0 ** 23;
-                    }
-                    default {
-                        die "While parsing fraction type, unknown type $type at $filename:$line_number";
-                    }
-                }
-
-                $mantissa *= 100; # Turn it into percents
-
-                        given( $relation ) {
-                            when( 0 ) {
-                                $relation="";
-                            }
-                            when( 1 ) {
-                                $relation="p";
-                            }
-                            default {
-                                die "While parsing fraction type, unknown relation $relation at $filename:$line_number";
-                            }
-                        }
-
-                print OUTFILE "\n$1  $2=\"$val$mantissa%$relation\"";
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x10\)0x(.*)$/) {
-                # Attribute decimal
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=reparse_attrib( $2, $3 );
-
-                if( !defined($val) ) {
-                    $val=signedhex($3);
-                }
+                my $val=parse_attribute($4, $2);
 
                 print OUTFILE "\n$1  $2=\"$val\"";
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x11\)0x(.*)$/) {
-                # Attribute Hexadecimal
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=reparse_attrib( $2, $3 );
-
-                if( !defined($val) ) {
-                    $val=hex($3);
-                    printf OUTFILE "\n$1  $2=\"0x%x\"", $val;
-                } else {
-                    print OUTFILE "\n$1  $2=\"$val\"";
-                }
-
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x12\)0x(.*)$/) {
-                # Attribute boolean
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=signedhex($3);
-                if( $val==0 ) {
-                    printf OUTFILE "\n$1  $2=\"false\"";
-                } elsif( $val==-1 ) {
-                    printf OUTFILE "\n$1  $2=\"true\"";
-                } else {
-                    die "$filename:$line_number: \"$_\"\n";
-                }
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1c\)0x(.*)$/) {
-                # Attribute Color ARGB8
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=hex($3);
-
-                printf OUTFILE ("\n$1  $2=\"#%08x\"", $val);
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1d\)0x(.*)$/) {
-                # Attribute Color RGB8
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=hex($3);
-
-                # Mask out the Alpha channel
-                $val&=0x00ffffff;
-
-                printf OUTFILE ("\n$1  $2=\"#%06x\"", $val);
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1e\)0x(.*)$/) {
-                # Attribute Color ARGB4
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=hex($3);
-
-                # Mask out the Alpha channel
-                local $value=0;
-
-                $val>>=4;
-                $value=$val&0xf;
-
-                $val>>=4;
-                $value|=$val&0xf0;
-
-                $val>>=4;
-                $value|=$val&0xf00;
-
-                $val>>=4;
-                $value|=$val&0xf000;
-
-                printf OUTFILE ("\n$1  $2=\"#%04x\"", $value);
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\(type 0x1f\)0x(.*)$/) {
-                # Attribute Color RGB4
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $val=hex($3);
-
-                # Mask out the Alpha channel
-                local $value=0;
-
-                $val>>=4;
-                $value=$val&0xf;
-
-                $val>>=4;
-                $value|=$val&0xf0;
-
-                $val>>=4;
-                $value|=$val&0xf00;
-
-                printf OUTFILE ("\n$1  $2=\"#%03x\"", $value);
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\@0x([0-9a-f]+)$/) {
-                # Attribute pointing at resource
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                local $res=hex($3);
-
-                exists( $references{$res} ) or
-                        die "Attribute points to resource 0x$3 which doesn't exist at $filename:$line_number";
-
-                print OUTFILE "\n$1  $2=\"\@$references{$res}\"";
-            }
-            when(/^( *)A: ([^)]+)\(0x[0-9a-f]+\)=\?0x([0-9a-f]+)$/) {
-                # Attribute pointing at resource
-                $element_open or die "Attribute with no open element at $filename:$line_number";
-
-                exists( $references{hex($3)} ) or die "Attribute points to resource 0x$3 which doesn't exist at $filename:$line_number";
-
-                print OUTFILE "\n$1  $2=\"?$references{hex($3)}\"";
             }
             when(/^( *)C: "(.*)"$/) {
                 # Tag content
@@ -658,6 +419,280 @@ sub reparse_attrib
     return undef if $val!=$data;
 
     return $ret;
+}
+
+# Parse a floating point type
+sub parse_type_4
+{
+    my $val=hex($_[0]);
+    my $value=0.0;
+
+    # Zero is a special case in FP
+    if( $val!=0 ) {
+        # 1 bit of sign, 8 bits of exponent, 23 bits of mantissa
+        my $man=$val % 0x800000;
+        $man/=2**23;
+        $man+=1;
+
+        $val>>=23;
+
+        my $exp=$val % 0x100;
+        $exp-=0x7f;
+        $val>>=8;
+
+        $value=$man*2**$exp;
+
+        if( $val ) {
+            $value= -$value;
+        }
+    }
+
+    return $value;
+}
+
+# Parse a dimension type
+sub parse_type_5
+{
+    my $val=signedhex($_[0]);
+
+    # Extract the value type
+    my $value=$val/256;
+    $value+=0.5;
+    $value=floor($value);
+    my $unit;
+
+    # Check which unit to use
+    given( $val & 0x0f ) {
+        when(0) { $unit='px'; }
+        when(1) { $unit='dip'; }
+        when(2) { $unit='sp'; }
+        when(3) { $unit='pt'; }
+        when(4) { $unit='in'; }
+        when(5) { $unit='mm'; }
+        default { die "$filename:$line_number: Unknown unit for type: \"$_[0]\"\n"; }
+    }
+
+    # Check what split between fraction and whole
+    given( ($val & 0x30)>>4 ) {
+        when(0) { };                        # Integer
+        when(1) { $value/=128 };            # Fix point 7 bit shift
+        when(2) { $value/=32768 };          # Fix point 15 bit shift
+        when(3) { $value/=8,388,608 };      # Fix point 23 bit shift
+    }
+
+    return "$value$unit";
+}
+
+# Parse fraction type
+sub parse_type_6
+{
+    my $val=signedhex($_[0]);
+
+    # 4 bit relation
+    my $relation=$val&0x7;
+    $val >>= 4;
+    # 4 bit fraction type
+    my $type=$val&0x7;
+    $val >>= 4;
+
+    # 23 bit mantissa
+    my $mantissa=$val&((1<<23)-1);
+    $val >>= 23;
+
+    # $val is zero if the number is positive
+    if( $val ) {
+        # Number is negative - perform two's complement on it to turn it positive
+        $mantissa ^= (1<<23)-1;
+        $mantissa ++;
+        $val="-";
+    } else {
+        $val="";
+    }
+
+    given( $type ) {
+        when( 0x0 ) {
+            # Number is whole - do nothing
+        }
+        when( 0x1 ) {
+            # 16 bit whole, 7 bit fraction
+            $mantissa /= 2.0 ** 7;
+        }
+        when( 0x2 ) {
+            # 8 bit whole, 15 bit fraction
+            $mantissa /= 2.0 ** 15;
+        }
+        when( 0x3 ) {
+            # 23 bits of fraction
+            $mantissa /= 2.0 ** 23;
+        }
+        default {
+            die "While parsing fraction type, unknown type $type";
+        }
+    }
+
+    $mantissa *= 100; # Turn it into percents
+
+    given( $relation ) {
+        when( 0 ) {
+            $relation="";
+        }
+        when( 1 ) {
+            $relation="p";
+        }
+        default {
+            die "While parsing fraction type, unknown relation $relation at $filename:$line_number";
+        }
+    }
+
+    return "$val$mantissa%$relation";
+}
+
+# Parse type boolean
+sub parse_type_12
+{
+    my $val=signedhex($_[0]);
+
+    if( $val==0 ) {
+        return "false";
+    } elsif( $val==-1 ) {
+        return "true";
+    } else {
+        die "Boolean is neither 0 nor -1";
+    }
+}
+
+# Parse type ARGB8
+sub parse_type_1c
+{
+    my $val=hex($_[0]);
+
+    return sprintf "#%08x", $val;
+}
+
+# Parse type RGB8
+sub parse_type_1d
+{
+    my $val=hex($_[0]);
+
+    # Mask out the Alpha channel
+    $val&=0x00ffffff;
+
+    return sprintf "#%06x", $val;
+}
+
+# Parse type ARGB4
+sub parse_type_1e
+{
+    my $val=hex($_[0]);
+
+    # Mask out the Alpha channel
+    my $value=0;
+
+    $val>>=4;
+    $value=$val&0xf;
+
+    $val>>=4;
+    $value|=$val&0xf0;
+
+    $val>>=4;
+    $value|=$val&0xf00;
+
+    $val>>=4;
+    $value|=$val&0xf000;
+
+    return sprintf "#%04x", $value;
+}
+
+# Parse type RGB4
+sub parse_type_1f
+{
+    my $val=hex($_[0]);
+
+    # Mask out the Alpha channel
+    my $value=0;
+
+    $val>>=4;
+    $value=$val&0xf;
+
+    $val>>=4;
+    $value|=$val&0xf0;
+
+    $val>>=4;
+    $value|=$val&0xf00;
+
+    return sprintf "#%03x", $value;
+}
+
+sub parse_attribute
+{
+    my ($value, $attrib)=@_;
+
+    given( $value ) {
+        when(/^.*\(Raw: "(.*)"\)$/) {
+            return $1;
+        }
+        when(/^\(type 0x4\)0x(.*)$/) {
+            return parse_type_4($1);
+        }
+        when(/^\(type 0x5\)0x(.*)$/) {
+            return parse_type_5($1);
+        }
+        when(/^\(type 0x6\)0x(.*)$/) {
+            return parse_type_6($1);
+        }
+        when(/^\(type 0x10\)0x(.*)$/) {
+            my $val=reparse_attrib( $attrib, $1 );
+
+            if( !defined($val) ) {
+                $val=signedhex($1);
+            }
+
+            return $val;
+        }
+        when(/^\(type 0x11\)0x(.*)$/) {
+            my $val=reparse_attrib( $attrib, $1 );
+
+            if( !defined($val) ) {
+                $val=sprintf "0x%x", hex($1);
+            }
+
+            return $val;
+        }
+        when(/^\(type 0x12\)0x(.*)$/) {
+            return parse_type_12($1);
+        }
+        when(/^\(type 0x1c\)0x(.*)$/) {
+            return parse_type_1c($1);
+        }
+        when(/^\(type 0x1d\)0x(.*)$/) {
+            return parse_type_1d($1);
+        }
+        when(/^\(type 0x1e\)0x(.*)$/) {
+            return parse_type_1e($1);
+        }
+        when(/^\(type 0x1f\)0x(.*)$/) {
+            return parse_type_1f($1);
+        }
+        when(/^\@0x([0-9a-f]+)$/) {
+            # Resource reference
+            my $res=hex($1);
+
+            exists( $references{$res} ) or
+                    die "Attribute points to resource 0x$1 which doesn't exist";
+
+            return "\@$references{$res}";
+        }
+        when(/^\?0x([0-9a-f]+)$/) {
+            # Theme reference
+            exists( $references{hex($1)} ) or 
+                    die "Attribute points to theme resource 0x$1 which doesn't exist";
+
+            return "?$references{hex($1)}";
+        }
+        default {
+            die "Unparsable line \"$_\"";
+        }
+    }
 }
 
 # Convert all 32 bit values to signed 32 bit, regardless of whether our perl implementation is 32
