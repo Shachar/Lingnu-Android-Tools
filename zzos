@@ -45,7 +45,7 @@ $outdir=".";
 GetOptions("framework=s" => \@framework_names, "output=s" => \$outdir ) or help();
 
 my ($apkpath, $delayed_fail);
-$delayed_fail=0;
+my $delayed_fail=0;
 while( $apkpath = shift @ARGV ) {
     # For each APK to be processed
     my $fail=0;
@@ -100,7 +100,7 @@ sub process_apk
     close APKLIST;
 
     # Extract all of the files that need simple extraction
-    system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir ) or return 1;
+    system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir );
 
     return dump_values( $apkpath, $outdir );
 }
@@ -727,7 +727,7 @@ sub dump_values
 {
     my ( $apkpath, $outdir )=@_;
 
-    if( ! open( RESOURCES, "-|", "aapt", ( "d", "--values", $apkpath) ) ) {
+    if( ! open RESOURCES, "-|", "aapt", ( "d", "--values", "resources", $apkpath) ) {
         print STDERR "Failed to dump resources from $apkpath: $!\n";
 
         return 1;
@@ -736,27 +736,28 @@ sub dump_values
     my $state=0;
     my $configname=undef;
     my ($class, $name);
+    my $error;
 
     while( <RESOURCES> ) {
-        chmop;
+        chomp;
         
-        if( m/^ *config (\d+)( .*)$/ ) {
+        print "1: $_\n";
+        if( m'^ *config (\d+)( .*)?$' ) {
             # Start of new configuration block
-            close_pending_files; # Close all open pending files
-            $configname=parse_config_name $2;
+            close_pending_files(); # Close all open pending files
+            $configname=parse_config_name($2);
 
-            mkpath "$outdir/res/values$configname" or
-                    die "Failed to create res/values$configname: $!";
+            make_path( "$outdir/res/values$configname", { error => \$error } );
         } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):([^/]+)/([^:]+): t=' ) {
             die "Unexpected resource value" if ! defined $configname;
 
             die "Resource define non-package value" if $2 ne $package_name;
-            die "First time defined with value" if !exists $references{$1};
-            die "Inconsistent name of reference" if $references{$1} ne "$2:$3/$4";
+            die "First time defined with value" if !exists $references{hex($1)};
+            die "Inconsistent name of reference" if $references{hex($1)} ne "$2:$3/$4";
             ($class, $name)=( $3, $4 );
             $state = 1;
         } elsif( defined $name && $state==1 ) {
-            if( !parse_values( $class, $name, $_ ) ) {
+            if( !parse_values( $class, $name, $_, $outdir, $configname ) ) {
                 return 1;
             }
 
@@ -766,8 +767,8 @@ sub dump_values
             die "Unexpected resource value" if ! defined $configname;
 
             die "Resource define non-package value" if $2 ne $package_name;
-            die "First time defined with value" if !exists $references{$1};
-            die "Inconsistent name of reference" if $references{$1} ne "$2:array/$3";
+            die "First time defined with value" if !exists $references{hex($1)};
+            die "Inconsistent name of reference" if $references{hex($1)} ne "$2:array/$3";
 
             $class="array";
             $name=$3;
@@ -778,28 +779,90 @@ sub dump_values
             $count=$1+0; # Make sure perl knows it is, indeed, an integer
             $state=3;
 
-            write_array_open $name;
+            write_array_open($name);
 
             if( $count==0 ) {
-                write_array_close $name;
+                write_array_close($name);
                 $state=0;
             }
         } elsif( $state==3 ) {
             m'^ *#(\d+) \(Key=0x[0-9a-f]+\): (.*)$' or
                     die "Unexpected text \"$_\" for array item";
 
-            write_array_item $2;
+            write_array_item($2);
 
             if( --$count == 0 ) {
-                write_array_close $name;
+                write_array_close($name);
                 $state=0;
             }
+        } else {
+            print "$_\n";
         }
     }
 
     close( RESOURCES );
 
-    close_pending_files;
+    close_pending_files();
 
     return 0;
+}
+
+sub parse_config_name
+{
+    my ($string)=@_;
+
+    print "parse_config_name $string\n";
+
+    return "";
+}
+
+sub open_config_file
+{
+    my( $class, $outdir, $configname )=@_;
+    print "open_config_file $configname $class\n";
+    return $type_files{$class} if exists $type_files{$class};
+
+    print "open_config_file creating $class\n";
+    my $fileref;
+    open $fileref, ">$outdir/res/values$configname/${class}s.xml" or
+            die "Failed to open res/values$configname/${class}s.xml: $!";
+
+    print $fileref '<?xml version="1.0" encoding="utf-8"?>'."\n";
+    print $fileref "<resources>\n";
+
+    $type_files{$class}=$fileref;
+
+    return $type_files{$class};
+}
+
+sub close_pending_files
+{
+    print "closing pending files\n";
+    for( keys %type_files ) {
+        print "closing $_\n";
+        my $fileref = $type_files{$_};
+        print $fileref "</resources>\n";
+        close $fileref;
+
+        delete $type_files{$_};
+    }
+}
+
+sub parse_values
+{
+    my( $class, $name, $string, $outdir, $configname )=@_;
+
+    my $fileref = open_config_file( $class, $outdir, $configname );
+}
+
+sub write_array_open
+{
+}
+
+sub write_array_item
+{
+}
+
+sub write_array_close
+{
 }
