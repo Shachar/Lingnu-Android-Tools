@@ -23,6 +23,9 @@ $REF_PLUS=      0x00000008;
 $framework_references{0}="null";
 $framework_references_flags{0}=$REF_PUBLIC|$REF_HARDCODE;
 
+# Resource type open file descriptors
+my %type_files;
+
 sub help
 {
     print STDERR <<EOM;
@@ -68,7 +71,7 @@ sub process_apk
     my @ziplist;
     print "Processing $apkpath\n";
 
-    if( ! read_resources( $apkpath, $outdir ) ) {
+    if( ! read_resources( $apkpath, $outdir, 0 ) ) {
         return 1;
     }
 
@@ -99,7 +102,7 @@ sub process_apk
     # Extract all of the files that need simple extraction
     system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir ) or return 1;
 
-    return 0;
+    return dump_values( $apkpath, $outdir );
 }
 
 sub read_resources
@@ -718,4 +721,85 @@ sub printhash {
     $ret.="}";
 
     return $ret;
+}
+
+sub dump_values
+{
+    my ( $apkpath, $outdir )=@_;
+
+    if( ! open( RESOURCES, "-|", "aapt", ( "d", "--values", $apkpath) ) ) {
+        print STDERR "Failed to dump resources from $apkpath: $!\n";
+
+        return 1;
+    }
+
+    my $state=0;
+    my $configname=undef;
+    my ($class, $name);
+
+    while( <RESOURCES> ) {
+        chmop;
+        
+        if( m/^ *config (\d+)( .*)$/ ) {
+            # Start of new configuration block
+            close_pending_files; # Close all open pending files
+            $configname=parse_config_name $2;
+
+            mkpath "$outdir/res/values$configname" or
+                    die "Failed to create res/values$configname: $!";
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):([^/]+)/([^:]+): t=' ) {
+            die "Unexpected resource value" if ! defined $configname;
+
+            die "Resource define non-package value" if $2 ne $package_name;
+            die "First time defined with value" if !exists $references{$1};
+            die "Inconsistent name of reference" if $references{$1} ne "$2:$3/$4";
+            ($class, $name)=( $3, $4 );
+            $state = 1;
+        } elsif( defined $name && $state==1 ) {
+            if( !parse_values( $class, $name, $_ ) ) {
+                return 1;
+            }
+
+            ($class, $name)=(undef, undef);
+            $state=0;
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):array/([^:]+): <bag>$' ) {
+            die "Unexpected resource value" if ! defined $configname;
+
+            die "Resource define non-package value" if $2 ne $package_name;
+            die "First time defined with value" if !exists $references{$1};
+            die "Inconsistent name of reference" if $references{$1} ne "$2:array/$3";
+
+            $class="array";
+            $name=$3;
+            $state=2;
+        } elsif( $state==2 ) {
+            m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
+                    die "Unexpected text \"$_\" after array start";
+            $count=$1+0; # Make sure perl knows it is, indeed, an integer
+            $state=3;
+
+            write_array_open $name;
+
+            if( $count==0 ) {
+                write_array_close $name;
+                $state=0;
+            }
+        } elsif( $state==3 ) {
+            m'^ *#(\d+) \(Key=0x[0-9a-f]+\): (.*)$' or
+                    die "Unexpected text \"$_\" for array item";
+
+            write_array_item $2;
+
+            if( --$count == 0 ) {
+                write_array_close $name;
+                $state=0;
+            }
+        }
+    }
+
+    close( RESOURCES );
+
+    close_pending_files;
+
+    return 0;
 }
