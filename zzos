@@ -12,6 +12,15 @@ my %references, %framework_references;
 my %references_flags, %framework_refrences_flags;
 my %attrib_bags;
 
+my %class_map=(
+        raw=>undef,
+        id=>"ids.xml",
+        string=>"strings.xml",
+        dimen=>"dimens.xml",
+        color=>"colors.xml",
+        drawable=>undef,
+        );
+
 $REF_PUBLIC=    0x40000000;
 $REF_HARDCODE=  0x80000000;
 $REF_INTERNAL=  0x00000001;
@@ -745,8 +754,6 @@ sub dump_values
             # Start of new configuration block
             close_pending_files(); # Close all open pending files
             $configname=parse_config_name($2);
-
-            make_path( "$outdir/res/values$configname", { error => \$error } );
         } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):([^/]+)/([^:]+): t=0x([0-9a-f]+)' ) {
             die "Unexpected resource value" if ! defined $configname;
 
@@ -894,8 +901,9 @@ sub open_config_file
     my( $class, $outdir, $configname )=@_;
     return $type_files{$class} if exists $type_files{$class};
 
+    make_path( "$outdir/res/values$configname", { error => \$error } );
     my $fileref;
-    open $fileref, ">$outdir/res/values$configname/${class}s.xml" or
+    open $fileref, ">$outdir/res/values$configname/$class_map{$class}" or
             die "Failed to open res/values$configname/${class}s.xml: $!";
 
     print $fileref '<?xml version="1.0" encoding="utf-8"?>'."\n";
@@ -923,7 +931,13 @@ sub parse_values
 {
     my( $class, $name, $type, $string, $outdir, $configname )=@_;
 
-    my $fileref = open_config_file( $class, $outdir, $configname );
+    print "parse_values $class $name $type $string $outdir $configname\n";
+
+    die "Unknown class \"$class\"" if ! exists $class_map{$class};
+
+    if( defined $class_map{$class} ) {
+        my $fileref = open_config_file( $class, $outdir, $configname );
+    }
 }
 
 sub write_array_open
