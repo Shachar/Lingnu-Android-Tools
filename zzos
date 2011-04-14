@@ -14,8 +14,8 @@ my %attrib_bags;
 
 my %class_map=(
         raw=>undef,
-        id=>"ids.xml",
-        string=>"strings.xml",
+        id=>\&parse_id_value,
+        string=>\&parse_string_value,
         dimen=>"dimens.xml",
         color=>"colors.xml",
         drawable=>undef,
@@ -903,7 +903,7 @@ sub open_config_file
 
     make_path( "$outdir/res/values$configname", { error => \$error } );
     my $fileref;
-    open $fileref, ">$outdir/res/values$configname/$class_map{$class}" or
+    open $fileref, ">$outdir/res/values$configname/${class}s.xml" or
             die "Failed to open res/values$configname/${class}s.xml: $!";
 
     print $fileref '<?xml version="1.0" encoding="utf-8"?>'."\n";
@@ -931,12 +931,44 @@ sub parse_values
 {
     my( $class, $name, $type, $string, $outdir, $configname )=@_;
 
-    print "parse_values $class $name $type $string $outdir $configname\n";
-
     die "Unknown class \"$class\"" if ! exists $class_map{$class};
 
     if( defined $class_map{$class} ) {
         my $fileref = open_config_file( $class, $outdir, $configname );
+
+        ${class_map{$class}}( $name, $type, $string );
+    }
+}
+
+sub parse_id_value
+{
+    my( $name, $type, $string )=@_;
+
+    my $fileref = $type_files{id};
+    print $fileref "  <item type=\"id\" name=\"$name\" />\n";
+}
+
+sub parse_string_value
+{
+    my( $name, $type, $string )=@_;
+    my $fileref = $type_files{string};
+
+    if( $type==3 ) {
+        # Direct UTF-8 string
+        if( $string!~'^\s*\(string8\) "(.*)"$' ) {
+            die "Invalid string format: \"$string\"";
+        }
+        print $fileref "  <string name=\"$name\">$1</string>\n";
+    } elsif( $type==1 ) {
+        if( $string!~'^\s*\(reference\) 0x([0-9a-f]+)$' ) {
+            die "Invalid string format: \"$string\"";
+        }
+
+        die "Invalid reference 0x$1" if !exists $references{hex($1)};
+
+        print $fileref "  <string name=\"$name\">@".$references{hex($1)}."</string>\n";
+    } else {
+        die "Unhandled string type $type: \"$string\"";
     }
 }
 
