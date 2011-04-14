@@ -735,33 +735,32 @@ sub dump_values
 
     my $state=0;
     my $configname=undef;
-    my ($class, $name);
+    my ($class, $name, $type);
     my $error;
 
     while( <RESOURCES> ) {
         chomp;
         
-        print "1: $_\n";
         if( m'^ *config (\d+)( .*)?$' ) {
             # Start of new configuration block
             close_pending_files(); # Close all open pending files
             $configname=parse_config_name($2);
 
             make_path( "$outdir/res/values$configname", { error => \$error } );
-        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):([^/]+)/([^:]+): t=' ) {
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):([^/]+)/([^:]+): t=0x([0-9a-f]+)' ) {
             die "Unexpected resource value" if ! defined $configname;
 
             die "Resource define non-package value" if $2 ne $package_name;
             die "First time defined with value" if !exists $references{hex($1)};
             die "Inconsistent name of reference" if $references{hex($1)} ne "$2:$3/$4";
-            ($class, $name)=( $3, $4 );
+            ($class, $name, $type)=( $3, $4, $5 );
             $state = 1;
         } elsif( defined $name && $state==1 ) {
-            if( !parse_values( $class, $name, $_, $outdir, $configname ) ) {
+            if( !parse_values( $class, $name, $type, $_, $outdir, $configname ) ) {
                 return 1;
             }
 
-            ($class, $name)=(undef, undef);
+            ($class, $name, $type)=(undef, undef, undef);
             $state=0;
         } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):array/([^:]+): <bag>$' ) {
             die "Unexpected resource value" if ! defined $configname;
@@ -811,18 +810,90 @@ sub parse_config_name
 {
     my ($string)=@_;
 
-    print "parse_config_name $string\n";
+    my $ret="";
 
-    return "";
+    # The order here is important! See http://developer.android.com/guide/topics/resources/providing-resources.html#AlternativeResources
+
+    if( $string=~/mcc=(\d+)/ ) {
+        $ret.="-mcc$1";
+    }
+    if( $string=~/mnc=(\d+)/ ) {
+        $ret.="-mnc$1";
+    }
+    if( $string=~/lang=([a-z]+)/ ) {
+        $ret.="-$1";
+    }
+    if( $string=~/cnt=([A-Z]+)/ ) {
+        $ret.="-r$1";
+    }
+    if( $string=~/sz=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/lng=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/orient=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/type=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/night=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/density=(\S+)/ ) {
+        if( $1==120 ) {
+            $ret.="-ldpi";
+        } elsif( $1==160 ) {
+            $ret.="-mdpi";
+        } elsif( $1==240 ) {
+            $ret.="-hdpi";
+        } elsif( $1==320 ) {
+            $ret.="-xhdpi";
+        } elsif( $1 eq "no" ) {
+            $ret.="-nodpi";
+        } else {
+            die "Unsupported density mode $1: $string";
+        }
+    }
+    if( $string=~/touch=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/keyhid=(\d+) \((\S+)\)/ ) {
+        $ret.="-keys$2";
+    }
+    if( $string=~/kbd=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/navhid=(\d+) \((\S+)\)/ ) {
+        if( $1==4 ) {
+            $ret.="-navexposed";
+        } elsif( $1==8 ) {
+            $ret.="-navhidden";
+        } else {
+            die "Unsupported navigation availability value $1: $string";
+        }
+    }
+    if( $string=~/nav=(\d+) \((\S+)\)/ ) {
+        $ret.="-$2";
+    }
+    if( $string=~/w=(\d+) h=(\d+)/ ) {
+        # Dropped from the documentation as if it never existed
+        $ret.="-$1x$2";
+    }
+    if( $string=~/sdk=(\d+)/ ) {
+        # XXX Might add code to not print if minimal version dictated by other attributes
+        $ret.="-v$1";
+    }
+
+    return $ret;
 }
 
 sub open_config_file
 {
     my( $class, $outdir, $configname )=@_;
-    print "open_config_file $configname $class\n";
     return $type_files{$class} if exists $type_files{$class};
 
-    print "open_config_file creating $class\n";
     my $fileref;
     open $fileref, ">$outdir/res/values$configname/${class}s.xml" or
             die "Failed to open res/values$configname/${class}s.xml: $!";
@@ -850,7 +921,7 @@ sub close_pending_files
 
 sub parse_values
 {
-    my( $class, $name, $string, $outdir, $configname )=@_;
+    my( $class, $name, $type, $string, $outdir, $configname )=@_;
 
     my $fileref = open_config_file( $class, $outdir, $configname );
 }
