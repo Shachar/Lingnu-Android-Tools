@@ -780,13 +780,15 @@ sub dump_values
             $class="array";
             $name=$3;
             $state=2;
+
+            print "array start $class $name $state\n";
         } elsif( $state==2 ) {
             m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
                     die "Unexpected text \"$_\" after array start";
             $count=$1+0; # Make sure perl knows it is, indeed, an integer
             $state=3;
 
-            write_array_open($name);
+            write_array_open($name, $outdir, $configname);
 
             if( $count==0 ) {
                 write_array_close($name);
@@ -1024,12 +1026,44 @@ sub parse_color_value
 
 sub write_array_open
 {
+    my($name, $outdir, $configname)=@_;
+
+    my $fileref = open_config_file( "array", $outdir, $configname );
+
+    print $fileref "  <array name=\"$name\">\n"
 }
 
 sub write_array_item
 {
+    my($string)=@_;
+
+    my $fileref = $type_files{array};
+
+    given( $string ) {
+        when( m'^\(reference\) 0x([0-9a-f]+)$' ) {
+            my $ref=hex($1);
+            die "Invalid reference 0x$ref" if ! exists $references{$ref};
+
+            print $fileref "    <item>@".$references{$ref}."</item>\n";
+        }
+        when( m'^\(color\) #([0-9a-f]+)$' ) {
+            # We cannot tell a color from an integer
+            print $fileref "    <item>#$1</item> <!-- or int ".signedhex($1)." -->\n";
+        }
+        when( m'^\(string8\) "(.*)"$' ) {
+            print $fileref "    <item>$1</item>\n";
+        }
+        default {
+            die "Don't know how to parse \"$_\"";
+        }
+    }
 }
 
 sub write_array_close
 {
+    my($name)=@_;
+
+    my $fileref = $type_files{array};
+
+    print $fileref "  </array>\n\n"
 }
