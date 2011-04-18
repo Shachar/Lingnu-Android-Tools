@@ -20,7 +20,11 @@ my %class_map=(
         dimen=>\&parse_dimen_value,
         color=>\&parse_color_value,
         drawable=>\&parse_color_value,
-        );
+    );
+
+my %type_map=(
+        8=>"bool",
+    );
 
 $REF_PUBLIC=    0x40000000;
 $REF_HARDCODE=  0x80000000;
@@ -764,6 +768,7 @@ sub dump_values
             ($class, $name, $type)=( $3, $4, $5 );
             $state = 1;
         } elsif( defined $name && $state==1 ) {
+            print "Line 2: $name $type: $_\n";
             if( !parse_values( $class, $name, $type, $_, $outdir, $configname ) ) {
                 return 1;
             }
@@ -780,8 +785,6 @@ sub dump_values
             $class="array";
             $name=$3;
             $state=2;
-
-            print "array start $class $name $state\n";
         } elsif( $state==2 ) {
             m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
                     die "Unexpected text \"$_\" after array start";
@@ -802,6 +805,40 @@ sub dump_values
 
             if( --$count == 0 ) {
                 write_array_close($name);
+                $state=0;
+            }
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):attr/([^:]+): <bag>' && 0 ) {
+            die "Unexpected resource value" if ! defined $configname;
+
+            die "Resource define non-package value" if $2 ne $package_name;
+            die "First time defined with value" if !exists $references{hex($1)};
+            die "Inconsistent name of reference. Was $references{hex($1)} now $2:attr/$3"
+                    if $references{hex($1)} ne "$2:attr/$3";
+
+            $class="attr";
+            $name=$3;
+            $state=4;
+
+            print "attr start $class $name $state\n";
+        } elsif( $state==4 ) {
+            m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
+                    die "Unexpected text \"$_\" after attr start";
+
+            $count=$1+0; # Make sure perl knows it is, indeed, an integer
+            die "Attribute with count different than 1" if $count!=1;
+
+            $state++;
+
+            if( $count==0 ) {
+                $state=0;
+            }
+        } elsif( $state==4 ) {
+            m'^ *#(\d+) \(Key=0x[0-9a-f]+\): \(color\) #(.*)$' or
+                    die "Unexpected text \"$_\" for attr item";
+
+            write_attr($name, hex($2));
+
+            if( --$count == 0 ) {
                 $state=0;
             }
         } else {
@@ -1066,4 +1103,9 @@ sub write_array_close
     my $fileref = $type_files{array};
 
     print $fileref "  </array>\n\n"
+}
+
+sub write_attr
+{
+    my ($name, $type)=@_;
 }
