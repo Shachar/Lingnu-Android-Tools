@@ -58,6 +58,12 @@ $outdir=".";
 
 GetOptions("framework=s" => \@framework_names, "output=s" => \$outdir ) or help();
 
+for( @framework_names ) {
+    read_resources( $_, $outdir, 1 ) or die "Failed to read framework resources for $_";
+    %framework_references = %references;
+    %framework_references_flags = %references_flags;
+}
+
 my ($apkpath, $delayed_fail);
 my $delayed_fail=0;
 while( $apkpath = shift @ARGV ) {
@@ -83,7 +89,7 @@ sub process_apk
 
     # List of files to be unzipped as they are
     my @ziplist;
-    print "Processing $apkpath\n";
+    print STDOUT "Processing $apkpath\n";
 
     if( ! read_resources( $apkpath, $outdir, 0 ) ) {
         return 1;
@@ -261,7 +267,7 @@ sub xml_decompile
         return 0;
     }
 
-    print "Processing $filename\n";
+    print STDOUT "  Generating $filename\n";
 
     print OUTFILE '<?xml version="1.0" encoding="utf-8"?>'."\n";
     my @elements=();
@@ -410,10 +416,9 @@ sub reparse_attrib
         return undef;
     }
 
-    my ($ret, $data, $zero )=("", 0, "");
+    my ($ret, $data, $zero )=(undef, 0, undef);
     my $rev = ~$val;
     my $bag = $attrib_bags{$attrib};
-    my $zero = "";
 
     for( keys( %$bag ) ) {
         if( ($rev & $bag->{$_})==0 ) {
@@ -433,7 +438,7 @@ sub reparse_attrib
     }
 
     return $zero if $val==0 && $zero;
-    return undef if $val!=$data;
+    return undef if $val!=$data || !defined $ret;
 
     return $ret;
 }
@@ -658,7 +663,7 @@ sub parse_attribute
             return parse_type_6($1);
         }
         when(/^\(type 0x10\)0x(.*)$/) {
-            my $val=reparse_attrib( $attrib, $1 );
+            my $val=reparse_attrib( $attrib, hex($1) );
 
             if( !defined($val) ) {
                 $val=signedhex($1);
@@ -667,7 +672,7 @@ sub parse_attribute
             return $val;
         }
         when(/^\(type 0x11\)0x(.*)$/) {
-            my $val=reparse_attrib( $attrib, $1 );
+            my $val=reparse_attrib( $attrib, hex($1) );
 
             if( !defined($val) ) {
                 $val=sprintf "0x%x", hex($1);
@@ -768,7 +773,6 @@ sub dump_values
             ($class, $name, $type)=( $3, $4, $5 );
             $state = 1;
         } elsif( defined $name && $state==1 ) {
-            print "Line 2: $name $type: $_\n";
             if( !parse_values( $class, $name, $type, $_, $outdir, $configname ) ) {
                 return 1;
             }
@@ -818,8 +822,6 @@ sub dump_values
             $class="attr";
             $name=$3;
             $state=4;
-
-            print "attr start $class $name $state\n";
         } elsif( $state==4 ) {
             m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
                     die "Unexpected text \"$_\" after attr start";
@@ -842,7 +844,7 @@ sub dump_values
                 $state=0;
             }
         } else {
-            print "$_\n";
+            # XXX print "$_\n";
         }
     }
 
@@ -956,9 +958,7 @@ sub open_config_file
 
 sub close_pending_files
 {
-    print "closing pending files\n";
     for( keys %type_files ) {
-        print "closing $_\n";
         my $fileref = $type_files{$_};
         print $fileref "</resources>\n";
         close $fileref;
@@ -976,7 +976,6 @@ sub parse_values
     if( defined $class_map{$class} ) {
         my $fileref = open_config_file( $class, $outdir, $configname );
 
-        print "parse_values $type $name\n";
         ${class_map{$class}}( $name, $type, $string, $class );
     }
 }
@@ -1037,7 +1036,6 @@ sub parse_color_value
 
     my $fileref = $type_files{$class};
 
-    print "parse_color_value $name\n";
     $type = hex($type);
     if( $type==0x1f || $type==0x1c || $type==0x1d ) {
         # Processed color
@@ -1058,7 +1056,6 @@ sub parse_color_value
     } else {
         die "Unhandled color type $type: \"$string\"";
     }
-    print "parse_color_values return\n";
 }
 
 sub write_array_open
