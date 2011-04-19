@@ -15,6 +15,7 @@ my %attrib_bags;
 my %class_map=(
         raw=>undef,
         layout=>undef,
+        xml=>undef,
         id=>\&parse_id_value,
         string=>\&parse_string_value,
         dimen=>\&parse_dimen_value,
@@ -68,11 +69,11 @@ my ($apkpath, $delayed_fail);
 my $delayed_fail=0;
 while( $apkpath = shift @ARGV ) {
     # For each APK to be processed
-    my $fail=0;
     my ($apkname, $apkdir ) = fileparse( $apkpath, ( ".apk" ) );
 
-    if( $fail = process_apk( $apkpath, "$outdir/$apkname" ) ) {
+    if( process_apk( $apkpath, "$outdir/$apkname" ) ) {
         $delayed_fail = 1;
+        print STDERR "process_apk failed for $apkname\n";
     }
 }
 
@@ -978,6 +979,8 @@ sub parse_values
 
         ${class_map{$class}}( $name, $type, $string, $class );
     }
+
+    return 1;
 }
 
 sub parse_id_value
@@ -996,7 +999,9 @@ sub parse_string_value
     $type=hex($type);
     if( $type==3 ) {
         # Direct UTF-8 string
-        if( $string!~'^\s*\(string8\) "(.*)"$' ) {
+        if( $string!~'^\s*\(string8\) "(.*)"$' &&
+                $string!~'^\s*\(string16\) "(.*)"$' )
+        {
             die "Invalid string format: \"$string\"";
         }
         print $fileref "  <string name=\"$name\">$1</string>\n";
@@ -1085,6 +1090,9 @@ sub write_array_item
             print $fileref "    <item>#$1</item> <!-- or int ".signedhex($1)." -->\n";
         }
         when( m'^\(string8\) "(.*)"$' ) {
+            print $fileref "    <item>$1</item>\n";
+        }
+        when( m'^\(string16\) "(.*)"$' ) {
             print $fileref "    <item>$1</item>\n";
         }
         default {
