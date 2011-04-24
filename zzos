@@ -907,7 +907,7 @@ sub dump_values
 
     close_pending_files();
 
-    return 0;
+    return write_public_file($outdir);
 }
 
 sub parse_config_name
@@ -995,13 +995,18 @@ sub parse_config_name
 
 sub open_config_file
 {
-    my( $class, $outdir, $configname )=@_;
+    my( $class, $outdir, $configname, $filename )=@_;
     return $type_files{$class} if exists $type_files{$class};
 
     make_path( "$outdir/res/values$configname", { error => \$error } );
     my $fileref;
-    open $fileref, ">$outdir/res/values$configname/${class}s.xml" or
-            die "Failed to open res/values$configname/${class}s.xml: $!";
+    if( !defined $filename ) {
+        open $fileref, ">$outdir/res/values$configname/${class}s.xml" or
+                die "Failed to open res/values$configname/${class}s.xml: $!";
+    } else {
+        open $fileref, ">$outdir/res/values$configname/${filename}" or
+                die "Failed to open res/values$configname/${filename}: $!";
+    }
 
     print $fileref '<?xml version="1.0" encoding="utf-8"?>'."\n";
     print $fileref "<resources>\n";
@@ -1271,4 +1276,28 @@ sub parse_content
     }
 
     return($ret, $type, $comment);
+}
+
+sub write_public_file
+{
+    my($outdir)=@_;
+
+    my $fileref = open_config_file( "public", $outdir, "", "public.xml" );
+
+    for( keys %references ) {
+        my( $key, $value )=($_, $references{$_});
+
+        if( $key!=0 ) {
+            $value=~'([^:/]+):([^:/]+)/([^:/]+)' or die "Invalid reference value $value";
+            my( $package, $class, $name )=($1, $2, $3);
+
+            if( $package eq $package_name ) {
+                # This is our reference
+                printf $fileref "  <public type=\"%s\" name=\"%s\" id=\"0x%x\" />\n",
+                    $class, $name, $key;
+            }
+        }
+    }
+
+    close_pending_files();
 }
