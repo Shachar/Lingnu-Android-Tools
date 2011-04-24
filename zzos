@@ -1121,7 +1121,13 @@ sub write_array_item
 
     my $fileref = $type_files{array};
 
-    print $fileref "    <item>".parse_content($string)."</item>\n";
+    my($value,,$comment)=parse_content($string);
+
+    if( $comment eq "" ) {
+        print $fileref "    <item>$value</item>\n";
+    } else {
+        print $fileref "    <item>$value</item> <!-- $comment -->\n";
+    }
 }
 
 sub write_array_close
@@ -1155,7 +1161,9 @@ sub write_style_item
             if ! exists $references{$nameref};
 
     my $fileref = $type_files{style};
+    my($value,$type,$comment)=parse_content($string);
 
+    print $fileref "    <item";
     if($nameref!=0)
     {
         $references{$nameref}=~'^([^:/]+):([^:/]+)/([^:/]+)$' or
@@ -1164,11 +1172,27 @@ sub write_style_item
         my ($package, $class, $name)=($1, $2, $3);
         die "Not an attribute item name \"$references{$nameref}\"" if( $class ne "attr" );
 
-        print $fileref "    <item name=\"$package:$name\">".parse_content($string).
-                "</item>\n";
-    } else {
-        print $fileref "    <item>".parse_content($string)."</item>\n";
+        print $fileref " name=\"$package:$name\"";
+
+        if( $type eq "color" ) {
+            # This might be a bit field/enum
+            $value=~/^#(.*)$/ or die "Color $value with invalid format";
+
+            my $tmpval=reparse_attrib( "$package:$name", hex($1) );
+
+            if( defined $tmpval ) {
+                $value=$tmpval;
+                $comment="";
+            }
+        }
     }
+    print $fileref ">$value</item>";
+
+    if($comment ne "" ) {
+        print $fileref "  <!-- $comment -->";
+    }
+
+    print $fileref "\n";
 }
 
 sub write_style_close
@@ -1180,35 +1204,42 @@ sub write_style_close
     print $fileref "  </style>\n\n";
 }
 
+# Return a list of parsed name, type and comment (if any)
 sub parse_content
 {
     my($string)=@_;
-    my $ret;
+    my($ret, $type, $comment);
 
     given( $string ) {
-        when( m'^\(reference\) 0x([0-9a-f]+)$' ) {
-            my $ref=hex($1);
+        when( m'^\((reference)\) 0x([0-9a-f]+)$' ) {
+            $type=$1;
+            my $ref=hex($2);
             die "Invalid reference 0x$ref" if ! exists $references{$ref};
 
             $ret="@".$references{$ref};
         }
-        when( m'^\(color\) #([0-9a-f]+)$' ) {
+        when( m'^\((color)\) #([0-9a-f]+)$' ) {
             # We cannot tell a color from an integer
-            $ret="#$1<!-- or int ".signedhex($1)." -->";
+            $type=$1;
+            $ret="#$2";
+            $comment="or int ".signedhex($2);
         }
-        when( m'^\(string8\) "(.*)"$' ) {
-            $ret=escape_string($1);
+        when( m'^\((string8)\) "(.*)"$' ) {
+            $type=$1;
+            $ret=escape_string($2);
         }
-        when( m'^\(string16\) "(.*)"$' ) {
-            $ret=escape_string($1);
+        when( m'^\((string16)\) "(.*)"$' ) {
+            $type=$1;
+            $ret=escape_string($2);
         }
-        when( m'^\(dimension\) (.*)$' ) {
-            $ret=$1;
+        when( m'^\((dimension)\) (.*)$' ) {
+            $type=$1;
+            $ret=$2;
         }
         default {
             die "Don't know how to parse \"$_\"";
         }
     }
 
-    return $ret;
+    return($ret, $type, $comment);
 }
