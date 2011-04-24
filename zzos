@@ -1066,8 +1066,9 @@ sub parse_id_value
 {
     my( $name, $type, $string, $class )=@_;
 
+    $type=hex($type);
     my $fileref = $type_files{id};
-    print $fileref "  <item type=\"id\" name=\"$name\" />\n";
+    print $fileref "  <item type=\"id\" name=\"$name\">".format_value($string, $type)."</item>\n";
 }
 
 # Accept a string as reported by aapt, and issue it in a form suitable for XML output
