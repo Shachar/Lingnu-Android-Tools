@@ -1134,10 +1134,10 @@ sub parse_color_value
     $type = hex($type);
     if( $type==0x1f || $type==0x1c || $type==0x1d ) {
         # Processed color
-        if( $string!~'^\s*\(color\) (#\S+)$' ) {
+        if( $string!~'^\s*\(color\) #(\S+)$' ) {
             die "Invalid string format: \"$string\"";
         }
-        print $fileref "  <$class name=\"$name\">$1</$class>\n";
+        print $fileref "  <$class name=\"$name\">".format_value($1, $type)."</$class>\n";
     } elsif( $type==3 ) {
         # Do nothing. Reference to external XML
     } elsif( $type==1 ) {
@@ -1320,4 +1320,54 @@ sub write_public_file
     }
 
     close_pending_files();
+}
+
+sub format_value
+{
+    my( $value, $type )=@_;
+
+    if( $type==0x00 ) {
+        # NULL
+    } elsif( $type==0x01 ) {
+        # Reference
+        die "Type reference not yet supported \"$value\"";
+    } elsif( $type==0x02 ) {
+        # Attribute
+        die "Type attribute not yet supported \"$value\"";
+    } elsif( $type==0x03 ) {
+        # String
+        return escape_string($value);
+    } elsif( $type==0x04 ) {
+        # Float
+        return parse_type_4($value);
+    } elsif( $type==0x05 ) {
+        # Dimension
+        return parse_type_5($value);
+    } elsif( $type==0x06 ) {
+        # Fraction
+        return parse_type_6($value);
+    } elsif( $type==0x10 ) {
+        # Decimal integer
+        return signedhex($value);
+    } elsif( $type==0x11 ) {
+        # Hexadecimal integer
+        return sprintf "0x%x", hex($1);
+    } elsif( $type==0x12 ) {
+        # Boolean
+        return parse_type_12($value);
+    } elsif( $type==0x1c ) {
+        # ARGB8
+        return parse_type_1c($value);
+    } elsif( $type==0x1d ) {
+        # RGB8
+        return parse_type_1d($value);
+    } elsif( $type==0x1e ) {
+        # ARGB4
+        return parse_type_1e($value);
+    } elsif( $type==0x1f ) {
+        # RGB4
+        return parse_type_1f($value);
+    } else {
+        die sprintf("Unknown type %02x with value %s", $type, $value);
+    }
 }
