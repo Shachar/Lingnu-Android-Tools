@@ -231,7 +231,7 @@ sub read_resources
                 }
 
                 if( $type eq "attr" ) {
-                    # We don't care about style bags
+                    # We don't care about style bags at this point
                     $state=1; # Start of bag
                     $bag_index = "$package:$str";
                 }
@@ -844,6 +844,38 @@ sub dump_values
             if( --$count == 0 ) {
                 $state=0;
             }
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):style/([^:]+): <bag>$' ) {
+            die "Unexpected resource value" if ! defined $configname;
+
+            die "Resource define non-package value" if $2 ne $package_name;
+            die "First time defined with value" if !exists $references{hex($1)};
+            die "Inconsistent name of reference" if $references{hex($1)} ne "$2:style/$3";
+
+            $class="style";
+            $name=$3;
+            $state=30;
+        } elsif( $state==30 ) {
+            m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
+                    die "Unexpected text \"$_\" after array start";
+            $count=$1+0; # Make sure perl knows it is, indeed, an integer
+            $state=31;
+
+            write_style_open($name, $outdir, $configname);
+
+            if( $count==0 ) {
+                write_style_close($name);
+                $state=0;
+            }
+        } elsif( $state==31 ) {
+            m'^ *#(\d+) \(Key=0x([0-9a-f]+)\): (.*)$' or
+                    die "Unexpected text \"$_\" for style item";
+
+            write_style_item($3, hex($2));
+
+            if( --$count == 0 ) {
+                write_style_close($name);
+                $state=0;
+            }
         } else {
             # XXX print "$_\n";
         }
@@ -1089,27 +1121,7 @@ sub write_array_item
 
     my $fileref = $type_files{array};
 
-    given( $string ) {
-        when( m'^\(reference\) 0x([0-9a-f]+)$' ) {
-            my $ref=hex($1);
-            die "Invalid reference 0x$ref" if ! exists $references{$ref};
-
-            print $fileref "    <item>@".$references{$ref}."</item>\n";
-        }
-        when( m'^\(color\) #([0-9a-f]+)$' ) {
-            # We cannot tell a color from an integer
-            print $fileref "    <item>#$1</item> <!-- or int ".signedhex($1)." -->\n";
-        }
-        when( m'^\(string8\) "(.*)"$' ) {
-            print $fileref "    <item>".escape_string($1)."</item>\n";
-        }
-        when( m'^\(string16\) "(.*)"$' ) {
-            print $fileref "    <item>".escape_string($1)."</item>\n";
-        }
-        default {
-            die "Don't know how to parse \"$_\"";
-        }
-    }
+    print $fileref "    <item>".parse_content($string)."</item>\n";
 }
 
 sub write_array_close
@@ -1124,4 +1136,79 @@ sub write_array_close
 sub write_attr
 {
     my ($name, $type)=@_;
+}
+
+sub write_style_open
+{
+    my($name, $outdir, $configname)=@_;
+
+    my $fileref = open_config_file( "style", $outdir, $configname );
+
+    print $fileref "  <style name=\"$name\">\n"
+}
+
+sub write_style_item
+{
+    my($string, $nameref)=@_;
+
+    die sprintf( "Key references non-existing resource 0x%08x", $nameref )
+            if ! exists $references{$nameref};
+
+    my $fileref = $type_files{style};
+
+    if($nameref!=0)
+    {
+        $references{$nameref}=~'^([^:/]+):([^:/]+)/([^:/]+)$' or
+                    die "Invalid reference format $references{$nameref}";
+
+        my ($package, $class, $name)=($1, $2, $3);
+        die "Not an attribute item name \"$references{$nameref}\"" if( $class ne "attr" );
+
+        print $fileref "    <item name=\"$package:$name\">".parse_content($string).
+                "</item>\n";
+    } else {
+        print $fileref "    <item>".parse_content($string)."</item>\n";
+    }
+}
+
+sub write_style_close
+{
+    my($name)=@_;
+
+    my $fileref = $type_files{style};
+
+    print $fileref "  </style>\n\n";
+}
+
+sub parse_content
+{
+    my($string)=@_;
+    my $ret;
+
+    given( $string ) {
+        when( m'^\(reference\) 0x([0-9a-f]+)$' ) {
+            my $ref=hex($1);
+            die "Invalid reference 0x$ref" if ! exists $references{$ref};
+
+            $ret="@".$references{$ref};
+        }
+        when( m'^\(color\) #([0-9a-f]+)$' ) {
+            # We cannot tell a color from an integer
+            $ret="#$1<!-- or int ".signedhex($1)." -->";
+        }
+        when( m'^\(string8\) "(.*)"$' ) {
+            $ret=escape_string($1);
+        }
+        when( m'^\(string16\) "(.*)"$' ) {
+            $ret=escape_string($1);
+        }
+        when( m'^\(dimension\) (.*)$' ) {
+            $ret=$1;
+        }
+        default {
+            die "Don't know how to parse \"$_\"";
+        }
+    }
+
+    return $ret;
 }
