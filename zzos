@@ -791,9 +791,11 @@ sub dump_values
             $name=$3;
             $state=2;
         } elsif( $state==2 ) {
-            m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
+            m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
                     die "Unexpected text \"$_\" after array start";
-            $count=$1+0; # Make sure perl knows it is, indeed, an integer
+            die "Non-zero parent for array \"$_\"" if hex($1)!=0;
+
+            $count=$2+0; # Make sure perl knows it is, indeed, an integer
             $state=3;
 
             write_array_open($name, $outdir, $configname);
@@ -824,10 +826,11 @@ sub dump_values
             $name=$3;
             $state=4;
         } elsif( $state==4 ) {
-            m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
+            m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
                     die "Unexpected text \"$_\" after attr start";
+            die "Non-zero parent for attribute \"$_\"" if hex($1)!=0;
 
-            $count=$1+0; # Make sure perl knows it is, indeed, an integer
+            $count=$2+0; # Make sure perl knows it is, indeed, an integer
             die "Attribute with count different than 1" if $count!=1;
 
             $state++;
@@ -855,12 +858,12 @@ sub dump_values
             $name=$3;
             $state=30;
         } elsif( $state==30 ) {
-            m'^ *Parent=0x[0-9a-f]+, Count=(\d+)$' or
+            m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
                     die "Unexpected text \"$_\" after array start";
-            $count=$1+0; # Make sure perl knows it is, indeed, an integer
+            $count=$2+0; # Make sure perl knows it is, indeed, an integer
             $state=31;
 
-            write_style_open($name, $outdir, $configname);
+            write_style_open($name, $outdir, $configname, hex($1));
 
             if( $count==0 ) {
                 write_style_close($name);
@@ -1146,11 +1149,18 @@ sub write_attr
 
 sub write_style_open
 {
-    my($name, $outdir, $configname)=@_;
+    my($name, $outdir, $configname, $parent)=@_;
+
+    die sprintf("Parent 0x%08x does not exist", $parent)
+            if !exists $references{$parent};
 
     my $fileref = open_config_file( "style", $outdir, $configname );
 
-    print $fileref "  <style name=\"$name\">\n"
+    if( $parent==0 ) {
+        print $fileref "  <style name=\"$name\">\n";
+    } else {
+        print $fileref "  <style name=\"$name\" parent=\"@".$references{$parent}."\">\n";
+    }
 }
 
 sub write_style_item
