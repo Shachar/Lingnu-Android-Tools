@@ -429,6 +429,7 @@ sub reparse_attrib
                     $data |= $bag->{$_};
                     push @selected, $_;
                 } elsif( $bag->{$_}==0 ) {
+                    $references{$_} =~ '/(.*)$';
                     $zero = $1;
                 }
             }
