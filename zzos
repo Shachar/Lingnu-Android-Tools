@@ -420,15 +420,14 @@ sub reparse_attrib
     my ($ret, $data, $zero )=(undef, 0, undef);
     my $rev = ~$val;
     my $bag = $attrib_bags{$attrib};
+    my @selected;
 
     for( keys( %$bag ) ) {
         if( ($rev & $bag->{$_})==0 ) {
             if( exists( $references{$_} ) ) {
-                $references{$_} =~ '/(.*)$';
                 if( ($data | $bag->{$_}) != $data ) {
                     $data |= $bag->{$_};
-                    $ret .= "|" if length($ret)>0;
-                    $ret .= $1;
+                    push @selected, $_;
                 } elsif( $bag->{$_}==0 ) {
                     $zero = $1;
                 }
@@ -439,7 +438,27 @@ sub reparse_attrib
     }
 
     return $zero if $val==0 && $zero;
-    return undef if $val!=$data || !defined $ret;
+    return undef if $val!=$data || $#selected==-1;
+
+    # We now need to eliminate overlapping values
+    while( $#selected > -1 ) {
+        my $att = shift @selected;
+        my $att_val=$bag->{$att};
+        my $flag=0;
+
+        # This value is not contained by any values that came before, but it might be contained
+        # by values later on.
+        for( @selected ) {
+            # Does the current attribute change the $i attribute?
+            $flag = ($bag->{$_}|$att_val)==$bag->{$_};
+        }
+
+        if( !$flag ) {
+            $references{$att} =~ '/(.*)$';
+            $ret .= "|" if length($ret)>0;
+            $ret .= $1;
+        }
+    }
 
     return $ret;
 }
