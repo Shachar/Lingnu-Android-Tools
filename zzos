@@ -40,10 +40,8 @@ my %class_map=(
         dimen=>\&parse_dimen_value,
         color=>\&parse_color_value,
         drawable=>\&parse_color_value,
-    );
-
-my %type_map=(
-        8=>"bool",
+        bool=>\&parse_bool_value,
+        integer=>\&parse_int_value,
     );
 
 $REF_PUBLIC=    0x40000000;
@@ -1021,12 +1019,23 @@ sub open_config_file
     make_path( "$outdir/res/values$configname", { error => \$error } );
     my $fileref;
     if( !defined $filename ) {
-        open $fileref, ">$outdir/res/values$configname/${class}s.xml" or
-                die "Failed to open res/values$configname/${class}s.xml: $!";
-    } else {
-        open $fileref, ">$outdir/res/values$configname/${filename}" or
-                die "Failed to open res/values$configname/${filename}: $!";
+        $filename="${class}s";
     }
+
+    if( -f "$outdir/res/values$configname/${filename}.xml" ) {
+        # More than one config with the same modifiers defined the same class
+        print STDERR "Redundant configuration of values$configname/${filename}.xml. Creating copy.\n";
+
+        my $count=1;
+        while( -f "$outdir/res/values$configname/${filename}.$count.xml" ) {
+            $count++;
+        }
+
+        $filename="$filename.$count";
+    }
+
+    open $fileref, ">$outdir/res/values$configname/${filename}.xml" or
+            die "Failed to open res/values$configname/${filename}.xml: $!";
 
     print $fileref '<?xml version="1.0" encoding="utf-8"?>'."\n";
     print $fileref "<resources>\n";
@@ -1069,6 +1078,27 @@ sub parse_id_value
     $type=hex($type);
     my $fileref = $type_files{id};
     print $fileref "  <item type=\"id\" name=\"$name\">".format_value($string, $type)."</item>\n";
+}
+
+sub parse_bool_value
+{
+    my( $name, $type, $string, $class )=@_;
+
+    $type=hex($type);
+    my $fileref = $type_files{bool};
+    print $fileref "  <bool name=\"$name\">".format_value($string, $type)."</bool>\n";
+}
+
+sub parse_int_value
+{
+    my( $name, $type, $string, $class )=@_;
+
+    if( $string!~'^\s*\(color\) #(\S+)$' ) {
+        die "Invalid integer format: \"$string\"";
+    }
+
+    my $fileref = $type_files{integer};
+    printf $fileref "  <integer name=\"$name\">%d</integer>\n", signedhex($1);
 }
 
 # Accept a string as reported by aapt, and issue it in a form suitable for XML output
@@ -1307,7 +1337,7 @@ sub write_public_file
 {
     my($outdir)=@_;
 
-    my $fileref = open_config_file( "public", $outdir, "", "public.xml" );
+    my $fileref = open_config_file( "public", $outdir, "", "public" );
 
     for( keys %references ) {
         my( $key, $value )=($_, $references{$_});
