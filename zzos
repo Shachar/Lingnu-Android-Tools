@@ -35,6 +35,7 @@ my %class_map=(
         raw=>undef,
         layout=>undef,
         xml=>undef,
+        anim=>undef,
         id=>\&parse_id_value,
         string=>\&parse_string_value,
         dimen=>\&parse_dimen_value,
@@ -1185,7 +1186,7 @@ sub parse_color_value
     my $fileref = $type_files{$class};
 
     $type = hex($type);
-    if( $type==0x1f || $type==0x1c || $type==0x1d ) {
+    if( $type==0x1f || $type==0x1c || $type==0x1d || $type==0x1e ) {
         # Processed color
         if( $string!~'^\s*\(color\) #(\S+)$' ) {
             die "Invalid string format: \"$string\"";
@@ -1340,6 +1341,10 @@ sub parse_content
             $ret=escape_string($2);
         }
         when( m'^\((dimension)\) (.*)$' ) {
+            $type=$1;
+            $ret=$2;
+        }
+        when( m'^\((float)\) (.*)$' ) {
             $type=$1;
             $ret=$2;
         }
