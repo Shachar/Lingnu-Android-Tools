@@ -1086,9 +1086,13 @@ sub parse_bool_value
 {
     my( $name, $type, $string, $class )=@_;
 
+    if( $string!~'^\s*\(color\) #(\S+)$' ) {
+        die "Invalid boolean format: \"$string\"";
+    }
+
     $type=hex($type);
     my $fileref = $type_files{bool};
-    print $fileref "  <bool name=\"$name\">".format_value($string, $type)."</bool>\n";
+    print $fileref "  <bool name=\"$name\">".format_value($1, $type)."</bool>\n";
 }
 
 sub parse_int_value
