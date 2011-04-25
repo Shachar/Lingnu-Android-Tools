@@ -42,6 +42,7 @@ my %class_map=(
         drawable=>\&parse_color_value,
         bool=>\&parse_bool_value,
         integer=>\&parse_int_value,
+        fraction=>\&parse_fraction_value,
     );
 
 $REF_PUBLIC=    0x40000000;
@@ -1025,6 +1026,7 @@ sub open_config_file
     if( -f "$outdir/res/values$configname/${filename}.xml" ) {
         # More than one config with the same modifiers defined the same class
         print STDERR "Redundant configuration of values$configname/${filename}.xml. Creating copy.\n";
+        $filename=".$filename";
 
         my $count=1;
         while( -f "$outdir/res/values$configname/${filename}.$count.xml" ) {
@@ -1099,6 +1101,18 @@ sub parse_int_value
 
     my $fileref = $type_files{integer};
     printf $fileref "  <integer name=\"$name\">%d</integer>\n", signedhex($1);
+}
+
+sub parse_fraction_value
+{
+    my( $name, $type, $string, $class )=@_;
+
+    if( $string!~'^\s*\(fraction\) (\S+)%$' ) {
+        die "Invalid fraction format: $name $type $class \"$string\"";
+    }
+
+    my $fileref = $type_files{fraction};
+    printf $fileref "  <$class name=\"$name\">%f%%</$class>\n", $1;
 }
 
 # Accept a string as reported by aapt, and issue it in a form suitable for XML output
