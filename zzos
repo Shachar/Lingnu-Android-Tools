@@ -116,7 +116,7 @@ sub process_apk
 
     set_package_name( $apkpath );
     # List of files to be unzipped as they are
-    my @ziplist;
+    my @ziplist, %rename_list;
     print STDOUT "Processing $apkpath\n";
 
     if( ! read_resources( $apkpath, $outdir, 0 ) ) {
@@ -133,6 +133,7 @@ sub process_apk
     # Scan all the files in the APK
     while( <APKLIST> ) {
         chomp;
+        my $file=$_;
 
         if( m/^resources.arsc$/ ) {
             # Do nothing. We handle this file through aapt dump resources.
@@ -143,12 +144,25 @@ sub process_apk
         } else {
             push @ziplist, $_;
         }
+
+        # lang-country combination get their "r" removed by aapt
+        if( $file=~'^res/([^/]+)-([a-z]{2})-([A-Z]{2})(-[^/]*)?/' ) {
+            my $name="res/$1-$2-$3$4";
+            if( ! exists $rename_list{$name} ) {
+                $rename_list{$name}="res/$1-$2-r$3$4";
+            }
+        }
     }
 
     close APKLIST;
 
     # Extract all of the files that need simple extraction
     system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir );
+
+    # Rename incorrectly named directories
+    for( keys %rename_list ) {
+        rename "$outdir/$_", "$outdir/$rename_list{$_}";
+    }
 
     return dump_values( $apkpath, $outdir );
 }
@@ -313,8 +327,6 @@ sub xml_decompile
         close XMLFILE;
         return 0;
     }
-
-    print STDOUT "  Generating $filename\n";
 
     print OUTFILE '<?xml version="1.0" encoding="utf-8"?>'."\n";
     my @elements=();
