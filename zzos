@@ -1164,6 +1164,8 @@ sub escape_string
     # $string=~s/ /\\u0020/g;
     $string=~s/\N{U+200e}/\\u200e/g; # LRM
     $string=~s/\N{U+200f}/\\u200f/g; # RLM
+    $string=~s/^@/\\@/g;
+    $string=~s/^\?/\\?/g;
 
     return $string;
 }
