@@ -30,6 +30,7 @@ use feature "switch";
 my %references, %framework_references;
 my %references_flags, %framework_refrences_flags;
 my %attrib_bags;
+my $package_name, $apk_package_name, $package_ext;
 
 my %class_map=(
         raw=>undef,
@@ -82,6 +83,12 @@ for( @framework_names ) {
     read_resources( $_, $outdir, 1 ) or die "Failed to read framework resources for $_";
     %framework_references = %references;
     %framework_references_flags = %references_flags;
+}
+
+if( $#ARGV==-1 ) {
+    help();
+
+    exit 0;
 }
 
 my ($apkpath, $delayed_fail);
@@ -163,7 +170,7 @@ sub read_resources
         chomp;
 
         my ($index, $package, $str);
-        my $flags=$REF_INTERNAL;
+        my $flags=$framework ? 0 : $REF_INTERNAL;
 
         $index=undef;
 
@@ -224,19 +231,16 @@ sub read_resources
                 }
 
                 if( exists( $references{$index} ) ) {
-                    die "Reference 0x$2 refers once to $references{$index} and once to $package:$str";
-                            # if ($references{$index} ne "$package:$str");
-                } else {
-                    if( $package ne $package_name ) {
-                        # An external symbol defined inside our package
-                        $flags|=$REF_NOEXPORT|$REF_PLUS;
-                        # $str="$package:$str";
+                    # A package sometimes defines attributes belonging to the android: package through plus
+                    if( $framework || ($reference_flags{$index} & $REF_INTERNAL) != 0 ) {
+                        print STDERR "$package_name $package\n";
+                        die "Reference 0x$2 refers once to $references{$index} and once to $package:$str";
                     }
-
-                    $references{$index}="$package:$str";
-
-                    $references_flags{$index}=$flags;
                 }
+
+                $references{$index}="$package:$str";
+
+                $references_flags{$index}=$flags;
             } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z\.]+):([^:/]+)/([^:]+): <bag>( \(PUBLIC\))?" )
             {
                 ($index, $package, $type, $str)=( hex($2), $3, $4, $5 );
@@ -299,6 +303,9 @@ sub xml_decompile
     while(<XMLFILE>) {
         chomp;
         $line_number++;
+        if( $filename eq "AndroidManifest.xml" && $_=~'^    A: package="(.*)" \(Raw: ".*"\)$' ) {
+            $apk_package_name=$1;
+        }
         given ($_) {
             when(/^( *)N: ([^=]+)=(.*)$/) {
                 local $new_level=length $1;
@@ -800,7 +807,11 @@ sub dump_values
     while( <RESOURCES> ) {
         chomp;
         
-        if( m'^ *config (\d+)( .*)?$' ) {
+        if( m'Package Group \d+ id=\d+ packageCount=\d+ name=(.+)$' ) {
+            $package_name=$1;
+
+            $package_ext = $package_name eq $apk_package_name ? "" : ".$1";
+        } elsif( m'^ *config (\d+)( .*)?$' ) {
             # Start of new configuration block
             close_pending_files(); # Close all open pending files
             $configname=parse_config_name($2);
@@ -1024,6 +1035,8 @@ sub open_config_file
         $filename="${class}s";
     }
 
+    $filename = "$filename$package_ext";
+
     if( -f "$outdir/res/values$configname/${filename}.xml" ) {
         # More than one config with the same modifiers defined the same class
         print STDERR "Redundant configuration of values$configname/${filename}.xml. Creating copy.\n";
@@ -1127,6 +1140,8 @@ sub escape_string
 
     $string=~s/'/\\'/g;
     $string=~s/&/&amp;/g;
+    $string=~s/</&lt;/g;
+    $string=~s/>/&gt;/g;
     $string=~s/\t/\\t/g;
     # $string=~s/ /\\u0020/g;
     $string=~s/\N{U+200e}/\\u200e/g; # LRM
