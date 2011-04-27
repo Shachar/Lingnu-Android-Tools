@@ -1168,7 +1168,6 @@ sub escape_string
 {
     my $string=$_[0];
 
-    $string=~s/'/\\'/g;
     $string=~s/&/&amp;/g;
     $string=~s/</&lt;/g;
     $string=~s/>/&gt;/g;
@@ -1179,7 +1178,7 @@ sub escape_string
     $string=~s/^@/\\@/g;
     $string=~s/^\?/\\?/g;
 
-    return $string;
+    return '"'.$string.'"';
 }
 
 sub parse_string_value
