@@ -114,6 +114,7 @@ sub process_apk
         return 1;
     }
 
+    set_package_name( $apkpath );
     # List of files to be unzipped as they are
     my @ziplist;
     print STDOUT "Processing $apkpath\n";
@@ -268,6 +269,28 @@ sub read_resources
     return 1;
 }
 
+sub set_package_name
+{
+    my ($apkpath)=@_;
+    if( !open XMLFILE, "-|", "aapt", ("d", "xmltree", $apkpath, "AndroidManifest.xml") ) {
+        print STDERR "Failed to dump XML tree $filename\n";
+        return 0;
+    }
+
+    while(<XMLFILE>) {
+        chomp;
+
+        if( m'^    A: package="(.*)" \(Raw: ".*"\)$' ) {
+            $flag = 0;
+
+            $apk_package_name = $1;
+            last;
+        }
+    }
+
+    close XMLFILE;
+}
+
 sub xml_decompile
 {
     my( $apkpath, $filename, $outdir ) = @_;
@@ -303,9 +326,7 @@ sub xml_decompile
     while(<XMLFILE>) {
         chomp;
         $line_number++;
-        if( $filename eq "AndroidManifest.xml" && $_=~'^    A: package="(.*)" \(Raw: ".*"\)$' ) {
-            $apk_package_name=$1;
-        }
+
         given ($_) {
             when(/^( *)N: ([^=]+)=(.*)$/) {
                 local $new_level=length $1;
@@ -746,10 +767,7 @@ sub parse_attribute
             # Resource reference
             my $res=hex($1);
 
-            exists( $references{$res} ) or
-                    die "Attribute points to resource 0x$1 which doesn't exist";
-
-            return "\@$references{$res}";
+            return "@".format_reference($res);
         }
         when(/^\?0x([0-9a-f]+)$/) {
             # Theme reference
@@ -1272,7 +1290,7 @@ sub write_style_open
     if( $parent==0 ) {
         print $fileref "  <style name=\"$name\">\n";
     } else {
-        print $fileref "  <style name=\"$name\" parent=\"@".$references{$parent}."\">\n";
+        print $fileref "  <style name=\"$name\" parent=\"@".format_reference($parent)."\">\n";
     }
 }
 
@@ -1337,9 +1355,8 @@ sub parse_content
         when( m'^\((reference)\) 0x([0-9a-f]+)$' ) {
             $type=$1;
             my $ref=hex($2);
-            die "Invalid reference 0x$ref" if ! exists $references{$ref};
 
-            $ret="@".$references{$ref};
+            $ret="@".format_reference($ref);
         }
         when( m'^\((color)\) #([0-9a-f]+)$' ) {
             # We cannot tell a color from an integer
@@ -1443,4 +1460,34 @@ sub format_value
     } else {
         die sprintf("Unknown type %02x with value %s", $type, $value);
     }
+}
+
+sub format_reference
+{
+    my ($index)=@_;
+
+    die sprintf "Reference 0x%08x is not defined", $index if ! exists $references{$index};
+
+    # Handle NULL first off
+    return $references{$index} if $index==0;
+
+    $references{$index}=~'^([^:/]+):([^:/]+)/([^:/]+)$' or die "Invalid reference format \"$references{$index}\"";
+    my ( $package, $class, $name ) = ( $1, $2, $3 );
+
+    my $ret="$class/$name";
+
+    # Add package name for external references
+    if( $package ne $apk_package_name ) {
+        $ret="$package:$ret";
+
+        if( ($references_flags{$index} & $REF_INTERNAL)!=0 ) {
+            # Add plus for references that need to be generated
+            $ret="+".$ret;
+        } elsif( ($references_flags{$index} & $REF_PUBLIC)==0 ) {
+            # Add star for references to private resources (as if that makes it okay to reference private resources...)
+            $ret="*".$ret;
+        }
+    }
+
+    return $ret;
 }
