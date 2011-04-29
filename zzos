@@ -58,6 +58,9 @@ $REF_PLUS=      0x00000008;
 $framework_references{0}="null";
 $framework_references_flags{0}=$REF_PUBLIC|$REF_HARDCODE;
 
+# Bit counting cache for num_set_bits
+my @bitcount=( 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4 );
+
 # Resource type open file descriptors
 my %type_files;
 
@@ -466,6 +469,21 @@ sub xml_decompile
     return 1;
 }
 
+sub num_set_bits
+{
+    my ($val)=@_;
+    my $ret=0, $i=0;
+
+    # Use a translation table for each nibble. There are 8 nibbles in 32 bit
+    while( $i<8 && $val!=0 ) {
+        $ret+=$bitcount[$val&0x0f];
+        $val>>=4;
+        $i++;
+    }
+
+    return $ret;
+}
+
 sub reparse_attrib
 {
     my ( $attrib, $val ) = @_;
@@ -480,8 +498,11 @@ sub reparse_attrib
     my $rev = ~$val;
     my $bag = $attrib_bags{$attrib};
     my @selected;
+    my @bag_keys=keys( %$bag );
 
-    for( keys( %$bag ) ) {
+    @bag_keys = sort { num_set_bits($bag->{$b}) <=> num_set_bits($bag->{$a}) } @bag_keys;
+
+    for( @bag_keys ) {
         if( ($rev & $bag->{$_})==0 ) {
             if( exists( $references{$_} ) ) {
                 if( ($data | $bag->{$_}) != $data ) {
@@ -501,6 +522,7 @@ sub reparse_attrib
     return undef if $val!=$data || $#selected==-1;
 
     # We now need to eliminate overlapping values
+    $val=0;
     while( $#selected > -1 ) {
         my $att = shift @selected;
         my $att_val=$bag->{$att};
@@ -508,17 +530,23 @@ sub reparse_attrib
 
         # This value is not contained by any values that came before, but it might be contained
         # by values later on.
-        for( @selected ) {
+        FUTURE: for( @selected ) {
             # Does the current attribute change the $i attribute?
-            $flag = ($bag->{$_}|$att_val)==$bag->{$_};
+            if( ($bag->{$_}|$att_val|$val)==($bag->{$_}|$val) ) {
+                $flag=1;
+                last FUTURE;
+            }
         }
 
         if( !$flag ) {
             $references{$att} =~ '/(.*)$';
             $ret .= "|" if length($ret)>0;
             $ret .= $1;
+            $val |= $att_val;
         }
     }
+
+    die sprintf("Internal logic error val=#%08x data=#%08x", $val, $data) if $val != $data;
 
     return $ret;
 }
@@ -1392,6 +1420,15 @@ sub parse_content
         when( m'^\((float)\) (.*)$' ) {
             $type=$1;
             $ret=$2;
+        }
+        when( m'^\((attribute)\) 0x(.*)$' ) {
+            $type=$1;
+            die "reference 0x$2 doesn't exist" if ! exists $references{hex($2)};
+            $references{hex($2)}=~'^([^:/]+):([^:/]+)/([^:/]+)$';
+            my ($package, $class, $name)=($1, $2, $3);
+            die "Attribute reference to none attribute resource $package:$class/$name"
+                    if $class ne "attr";
+            $ret="$name";
         }
         default {
             die "Don't know how to parse \"$_\"";
