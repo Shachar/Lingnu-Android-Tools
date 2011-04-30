@@ -28,8 +28,8 @@ use feature "switch";
 
 # Hashes for tracking the cross references
 my %references, %framework_references;
-my %references_flags, %framework_refrences_flags;
-my %attrib_bags;
+my %references_flags, %framework_references_flags;
+my %attrib_bags, %framework_attrib_bags;
 my $package_name, $apk_package_name, $package_ext;
 
 my %class_map=(
@@ -50,9 +50,35 @@ my %class_map=(
 $REF_PUBLIC=    0x40000000;
 $REF_HARDCODE=  0x80000000;
 $REF_INTERNAL=  0x00000001;
-$REF_NOEXPORT=  0x00000002;
 $REF_SPEC=      0x00000004;
-$REF_PLUS=      0x00000008;
+
+# Attribute type bits
+%attrib_types=(
+        0x00000001 => [ "reference", 0x01 ],
+        0x00000002 => [ "string", 0x03 ],
+        0x00000004 => [ "integer", 0x10 ],
+        0x00000008 => [ "boolean", 0x12 ],
+        0x00000010 => [ "color", 0x1c ],
+        0x00000020 => [ "float", 0x04 ],
+        0x00000040 => [ "dimension", 0x05 ],
+        0x00000080 => [ "fraction", 0x06 ],
+        0x00010000 => [ "enum", undef ],
+        0x00020000 => [ "flags", undef ],
+        );
+
+%attrib_references=(
+        0x01000000 => "type",
+        0x01000001 => "minValue",
+        0x01000002 => "maxValue",
+        0x01000003 => "l10n", # 0 - not required, 1 - suggested
+        # Plurals
+        0x01000004 => "p_other",
+        0x01000005 => "p_zero",
+        0x01000006 => "p_one",
+        0x01000007 => "p_two",
+        0x01000008 => "p_few",
+        0x01000009 => "p_many",
+        );
 
 # Hard code null
 $framework_references{0}="null";
@@ -86,6 +112,7 @@ for( @framework_names ) {
     read_resources( $_, $outdir, 1 ) or die "Failed to read framework resources for $_";
     %framework_references = %references;
     %framework_references_flags = %references_flags;
+    %framework_attrib_bags = %atrib_bags;
 }
 
 if( $#ARGV==-1 ) {
@@ -177,6 +204,7 @@ sub read_resources
     # Inherit all of the framework references
     %references = %framework_references;
     %references_flags = %framework_references_flags;
+    %attrib_bags = %framework_attrib_bags;
 
     open RESFILE, "-|", "aapt", ( "d", "--values", "resources", $apkpath ) or
             die "Failed to extract resources";
