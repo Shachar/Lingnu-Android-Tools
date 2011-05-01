@@ -365,6 +365,7 @@ sub xml_decompile
     print OUTFILE '<?xml version="1.0" encoding="utf-8"?>'."\n";
     my @elements=();
     my @schemas;
+    my %namespaces;
     my $current_level=-1;
     my $element_open=0;
     my $line_number=0;
@@ -374,7 +375,8 @@ sub xml_decompile
         $line_number++;
 
         given ($_) {
-            when(/^( *)N: ([^=]+)=(.*)$/) {
+            when(m'^( *)N: ([^=]+)=http://schemas.android.com/apk/res/(.*)$') {
+                $namespaces{$2}=$3;
                 local $new_level=length $1;
                 $new_level/=2;
                 local $firstline=1;
@@ -446,14 +448,20 @@ sub xml_decompile
                 @schemas=(); # Empty the array
                         $element_open=1;
             }
-            when(/^( *)A: ([^)]+)(\(0x[0-9a-f]+\))?=(.*)$/) {
+            when(m'^( *)A: (([^:/]+):)?([^)]+)(\(0x[0-9a-f]+\))?=(.*)$') {
                 # An attribute - we need to parse to find out which
                 # Attribute with value
                 $element_open or die "Attribute with no open element at $filename:$line_number";
 
-                my $val=parse_attribute($4, $2);
+                my ($attr, $val)=($4, $6);
+                if( $2 ) {
+                    die "Attribute from undeclared namespace $3: \"$_\""
+                            if ! exists $namespaces{$3};
+                    $attr="$3:$4";
+                    $val=parse_attribute($6, "$namespaces{$3}:$4");
+                }
 
-                print OUTFILE "\n$1  $2=\"$val\"";
+                print OUTFILE "\n$1  $attr=\"$val\"";
             }
             when(/^( *)C: "(.*)"$/) {
                 # Tag content
