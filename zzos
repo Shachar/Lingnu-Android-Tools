@@ -1189,7 +1189,13 @@ sub parse_config_name
         $ret.="-$2";
     }
     if( $string=~/keyhid=(\d+) \((\S+)\)/ ) {
-        $ret.="-keys$2";
+        if( $1==1 ) {
+            $ret.="-keysexposed";
+        } elsif( $1==2 ) {
+            $ret.="-keyshidden";
+        } else {
+            die "Key status $1($2) unknown";
+        }
     }
     if( $string=~/kbd=(\d+) \((\S+)\)/ ) {
         $ret.="-$2";
