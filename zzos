@@ -174,6 +174,10 @@ sub process_apk
             if( !xml_decompile( $apkpath, $_, $outdir ) ) {
                 return 1;
             }
+        } elsif( m'^res/.*\.html$' ) {
+            if( !xml_decompile( $apkpath, $_, $outdir ) ) {
+                return 1;
+            }
         } else {
             push @ziplist, $_;
         }
