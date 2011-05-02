@@ -37,6 +37,7 @@ my %class_map=(
         layout=>undef,
         xml=>undef,
         anim=>undef,
+        menu=>undef,
         id=>\&parse_id_value,
         string=>\&parse_string_value,
         dimen=>\&parse_dimen_value,
