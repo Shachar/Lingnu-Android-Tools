@@ -536,13 +536,34 @@ sub reparse_attrib
     my $bag = $attrib_bags{$attrib};
     die "Attrib $attrib with no format" if ! exists $bag->{format};
 
-    my ($ret, $data, $zero )=(undef, 0, undef);
-    if( ($bag->{format}&0x00030000) != 0 ) {
+    my $ret=undef;
+    my $bag_flags=$bag->{format};
+    if( ($bag_flags&0x00030000) != 0 ) {
         die "Attrib $attrib should have flags, but doesn't" if ! exists $bag->{flags};
 
         # Attrib has either enum or flags, either way this code will handle it
-        ($ret, $data, $zero)=reparse_attrib_enum_flags($bag->{flags}, $attrib, $val);
+        $ret=reparse_attrib_enum_flags($bag->{flags}, $attrib, $val);
+
+        $bag_flags&= ~0x00030000;
     }
+
+    return $ret if defined $ret;
+
+    my $strval=sprintf "%08x", $val;
+    for( keys %attrib_types ) {
+        if( ($_ & 0xfffc) ) {
+            if( ($bag_flags&$_)!=0 ) {
+                $ret = format_value( $strval, ${$attrib_types{$_}}[1] );
+
+                $bag_flags &= ~$_;
+            }
+        }
+    }
+
+    die sprintf "Unhandled flags in bag $attrib 0x%08x", $bag_flags
+            if $bag_flags!=0 && ! defined $ret;
+    die sprintf "Failed to format attrib $attrib with value #%08x", $val
+            if ! defined $ret;
 
     return $ret;
 }
@@ -743,7 +764,7 @@ sub parse_type_12
     } elsif( $val==-1 ) {
         return "true";
     } else {
-        die "Boolean is neither 0 nor -1";
+        die sprintf "Boolean is 0x%08x, neither 0 nor -1", $val;
     }
 }
 
