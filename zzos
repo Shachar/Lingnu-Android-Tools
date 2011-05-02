@@ -71,14 +71,15 @@ $REF_SPEC=      0x00000004;
         0x01000001 => "min",
         0x01000002 => "max",
         0x01000003 => "localization", # 0 - not required, 1 - suggested
-        # Plurals
-        # XXX Not yet supported
-        #0x01000004 => "p_other",
-        #0x01000005 => "p_zero",
-        #0x01000006 => "p_one",
-        #0x01000007 => "p_two",
-        #0x01000008 => "p_few",
-        #0x01000009 => "p_many",
+        );
+
+%plural_references=(
+        0x01000004 => "other",
+        0x01000005 => "zero",
+        0x01000006 => "one",
+        0x01000007 => "two",
+        0x01000008 => "few",
+        0x01000009 => "many",
         );
 
 # Hard code null
@@ -1074,10 +1075,46 @@ sub dump_values
                 write_style_close($name);
                 $state=0;
             }
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):plurals/([^:]+): <bag>$' ) {
+            die "Unexpected resource value" if ! defined $configname;
+
+            die "Resource define non-package value" if $2 ne $package_name;
+            die "First time defined with value" if !exists $references{hex($1)};
+            die "Inconsistent name of reference" if $references{hex($1)} ne "$2:plurals/$3";
+
+            $class="plurals";
+            $name=$3;
+            $state=40;
+        } elsif( $state==40 ) {
+            m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
+                    die "Unexpected text \"$_\" after array start";
+            die "Plurals $name with non-empty parent" if hex($1)!=0;
+
+            $count=$2+0; # Make sure perl knows it is, indeed, an integer
+            $state=41;
+
+            write_plurals_open($name, $outdir, $configname);
+
+            if( $count==0 ) {
+                write_plurals_close($name);
+                $state=0;
+            }
+        } elsif( $state==41 ) {
+            m'^ *#(\d+) \(Key=0x([0-9a-f]+)\): (.*)$' or
+                    die "Unexpected text \"$_\" for plurals item";
+
+            write_plurals_item($3, hex($2));
+
+            if( --$count == 0 ) {
+                write_plurals_close($name);
+                $state=0;
+            }
         } else {
             # XXX print "$_\n";
         }
     }
+
+    die "Ended while still inside bag state=$state" if $state!=0;
 
     close( RESOURCES );
 
@@ -1474,6 +1511,37 @@ sub write_style_close
     my $fileref = $type_files{style};
 
     print $fileref "  </style>\n\n";
+}
+
+sub write_plurals_open
+{
+    my($name, $outdir, $configname)=@_;
+
+    my $fileref = open_config_file( "plural", $outdir, $configname );
+
+    print $fileref "  <plurals name=\"$name\">\n";
+}
+
+sub write_plurals_item
+{
+    my($string, $nameref)=@_;
+
+    die sprintf( "Plural references non-existing resource 0x%08x", $nameref )
+            if ! exists $plural_references{$nameref};
+
+    my $fileref = $type_files{plural};
+
+    my($value,$type,$comment)=parse_content($string);
+    print $fileref "    <item quantity=\"$plural_references{$nameref}\">$value</item>\n";
+}
+
+sub write_plurals_close
+{
+    my($name)=@_;
+
+    my $fileref = $type_files{plural};
+
+    print $fileref "  </plurals>\n";
 }
 
 sub dump_attributes
