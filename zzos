@@ -72,12 +72,13 @@ $REF_SPEC=      0x00000004;
         0x01000002 => "max",
         0x01000003 => "localization", # 0 - not required, 1 - suggested
         # Plurals
-        0x01000004 => "p_other",
-        0x01000005 => "p_zero",
-        0x01000006 => "p_one",
-        0x01000007 => "p_two",
-        0x01000008 => "p_few",
-        0x01000009 => "p_many",
+        # XXX Not yet supported
+        #0x01000004 => "p_other",
+        #0x01000005 => "p_zero",
+        #0x01000006 => "p_one",
+        #0x01000007 => "p_two",
+        #0x01000008 => "p_few",
+        #0x01000009 => "p_many",
         );
 
 # Hard code null
@@ -905,14 +906,19 @@ sub parse_attribute
 
 # Convert all 32 bit values to signed 32 bit, regardless of whether our perl implementation is 32
 # or 64 bit.
-sub signedhex {
-    local $ret=hex(shift(@_));
+sub make_signed {
+    local $ret=shift(@_)+0;
 
     if ($ret>=0x80000000) {
         $ret-=0x100000000;
     }
 
     return $ret;
+}
+sub signedhex {
+    local $ret=hex(shift(@_));
+
+    return make_signed($ret);
 }
 
 sub printhash {
@@ -1074,6 +1080,8 @@ sub dump_values
     }
 
     close( RESOURCES );
+
+    dump_attributes($outdir);
 
     close_pending_files();
 
@@ -1465,6 +1473,106 @@ sub write_style_close
     my $fileref = $type_files{style};
 
     print $fileref "  </style>\n\n";
+}
+
+sub dump_attributes
+{
+    my ($outdir)=@_;
+
+    my $fileref = open_config_file( "attr", $outdir, "", "attrs" );
+
+    for( keys %attrib_bags ) {
+        if( $_=~'^([^:/]+):([^:/]+)$' ) {
+            if( $1 eq $apk_package_name ) {
+                # Only handle the attribs that belong to this package
+                my($key, $name)=($_, $2);
+
+                print $fileref "  <attr name=\"$name\"";
+
+                my $bag=$attrib_bags{$key};
+
+                die "Attribute $key does not have a format"
+                        if ! exists $bag->{format};
+
+                my $format=$bag->{format};
+
+                # Do we have a scalar format?
+                if( ($format&0xffff)!=0 ) {
+                    my $format_string;
+                    for( keys %attrib_types ) {
+                        if( ($_&0xffff)!=0 && ($format&$_)!=0 ) {
+                            $format_string.="|" if $format_string;
+                            $format_string.=${$attrib_types{$_}}[0];
+                        }
+                    }
+                    print $fileref " format=\"$format_string\"";
+                }
+
+                # Hard coding the types is not nice, but somewhat necessary
+                if( exists $bag->{min} ) {
+                    print $fileref " min=\"$bag->{min}\"";
+                }
+                if( exists $bag->{max} ) {
+                    print $fileref " max=\"$bag->{max}\"";
+                }
+                if( exists $bag->{localization} ) {
+                    die "Localization type present but is not 1 (is $bag->{localization}) in $key"
+                            if $bag->{localization}!=1;
+                    print $fileref " localization=\"suggested\"";
+                }
+
+                # Do we need content to this XML element?
+                if( ($format&0xffff0000)==0 ) {
+                    # Element is done
+                    print $fileref " />\n";
+                } else {
+                    die "Attrib $key with content has no bag information"
+                            if ! exists $bag->{flags};
+                    my $bag_flags=$bag->{flags};
+                    print $fileref ">\n";
+                    if( $format&0x00010000 ) {
+                        # Enum list
+                        for( keys %$bag_flags ) {
+                            die sprintf "Attrib $key has enum element 0x%08x with no name", $_
+                                    if ! exists $references{$_};
+                            $references{$_}=~'^([^:/]+):([^:/]+)/([^:/]+)$' or
+                                    die "Attrib $key reference $references{$_} with bad format";
+                            my ($package, $class, $name)=($1, $2, $3);
+                            die "Attrib $key references $references{$_} which is not an id"
+                                    if $class ne "id";
+                            die "Attrib $key references $references{$_} which is not in package"
+                                    if $package ne $apk_package_name;
+
+                            printf $fileref "    <enum name=\"$name\" value=\"%d\" />\n",
+                                   make_signed($bag_flags);
+                        }
+                    } elsif( $format&0x00020000 ) {
+                        # Flags list
+                        for( keys %$bag_flags ) {
+                            die sprintf "Attrib $key has enum element 0x%08x with no name", $_
+                                    if ! exists $references{$_};
+                            $references{$_}=~'^([^:/]+):([^:/]+)/([^:/]+)$' or
+                                    die "Attrib $key reference $references{$_} with bad format";
+                            my ($package, $class, $name)=($1, $2, $3);
+                            die "Attrib $key references $references{$_} which is not an id"
+                                    if $class ne "id";
+                            die "Attrib $key references $references{$_} which is not in package"
+                                    if $package ne $apk_package_name;
+
+                            printf $fileref
+                                    "    <flag name=\"$name\" value=\"0x%x\" />\n", $bag_flags;
+                        }
+                    } else {
+                        die "Unknown bag format for $key";
+                    }
+
+                    print $fileref "  </attr>\n";
+                }
+            }
+        } else {
+            die "Internal error in attrib bag $_";
+        }
+    }
 }
 
 # Return a list of parsed name, type and comment (if any)
