@@ -556,9 +556,14 @@ sub reparse_attrib
 
     return $ret if defined $ret;
 
+    if( $bag_flags &0x0004 ) {
+        # Integer is one of the accepted types
+        return undef;
+    }
+
     my $strval=sprintf "%08x", $val;
     for( keys %attrib_types ) {
-        if( ($_ & 0xfffc) ) {
+        if( ($_ & 0xfff8) ) {
             if( ($bag_flags&$_)!=0 ) {
                 $ret = format_value( $strval, ${$attrib_types{$_}}[1] );
 
