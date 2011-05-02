@@ -1729,7 +1729,8 @@ sub format_value
         die "Type attribute not yet supported \"$value\"";
     } elsif( $type==0x03 ) {
         # String
-        return escape_string($value);
+        $value =~ '^\s*\(string(8|16)\) "(.*)"$' or die "Cannot parse \"$value\"";
+        return escape_string($2);
     } elsif( $type==0x04 ) {
         # Float
         return parse_type_4($value);
