@@ -376,8 +376,8 @@ sub xml_decompile
         $line_number++;
 
         given ($_) {
-            when(m'^( *)N: ([^=]+)=http://schemas.android.com/apk/res/(.*)$') {
-                $namespaces{$2}=$3;
+            when(m'^( *)N: ([^=]+)=(http://schemas.android.com/apk/res/)(.*)$') {
+                $namespaces{$2}=$4;
                 local $new_level=length $1;
                 $new_level/=2;
                 local $firstline=1;
@@ -407,7 +407,7 @@ sub xml_decompile
                         die("Jumped for level $current_level to $new_level in one go at $filename:$line_number");
                 $current_level=$new_level;
                 $elements[$new_level]="";
-                push( @schemas, "xmlns:$2=\"$3\"");
+                push( @schemas, "xmlns:$2=\"$3$4\"");
             }
             when(/^( *)E: ([^ ]+)/) {
                 # Element
