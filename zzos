@@ -232,7 +232,7 @@ sub read_resources
                 } else {
                     $package_name=undef;
                 }
-            } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z.]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)" )
+            } elsif( m'^ *(spec )?resource 0x([0-9a-f]{8}) ([^:/]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)' )
             {
                 ($index, $package, $str)=( hex($2), $3, "$4/$5");
 
