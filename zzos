@@ -1043,7 +1043,7 @@ sub dump_values
             if( --$count == 0 ) {
                 $state=0;
             }
-        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):style/([^:]+): <bag>$' ) {
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):style/([^:]+): <bag>( \(PUBLIC\))?$' ) {
             die "Unexpected resource value" if ! defined $configname;
 
             die "Resource define non-package value" if $2 ne $package_name;
@@ -1110,7 +1110,7 @@ sub dump_values
                 $state=0;
             }
         } else {
-            # XXX print "$_\n";
+            # XXX print "Unmatched: $_\n";
         }
     }
 
