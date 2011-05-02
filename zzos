@@ -1193,6 +1193,8 @@ sub parse_config_name
             $ret.="-keysexposed";
         } elsif( $1==2 ) {
             $ret.="-keyshidden";
+        } elsif( $1==3 ) {
+            $ret.="-keyssoft";
         } else {
             die "Key status $1($2) unknown";
         }
