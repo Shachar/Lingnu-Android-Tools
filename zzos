@@ -461,6 +461,8 @@ sub xml_decompile
                     $val=parse_attribute($6, "$namespaces{$3}:$4");
                 } elsif( $val=~'\(Raw: "(.*)"\)$' ) {
                     $val=$1;
+                } else {
+                    die "Unparsable attribute";
                 }
 
                 print OUTFILE "\n$indent  $attr=\"$val\"";
