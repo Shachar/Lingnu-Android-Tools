@@ -1544,7 +1544,7 @@ sub dump_attributes
                                     if $package ne $apk_package_name;
 
                             printf $fileref "    <enum name=\"$name\" value=\"%d\" />\n",
-                                   make_signed($bag_flags);
+                                   make_signed($bag_flags->{$_});
                         }
                     } elsif( $format&0x00020000 ) {
                         # Flags list
@@ -1559,8 +1559,8 @@ sub dump_attributes
                             die "Attrib $key references $references{$_} which is not in package"
                                     if $package ne $apk_package_name;
 
-                            printf $fileref
-                                    "    <flag name=\"$name\" value=\"0x%x\" />\n", $bag_flags;
+                            printf $fileref "    <flag name=\"$name\" value=\"0x%x\" />\n",
+                                    $bag_flags->{$_};
                         }
                     } else {
                         die "Unknown bag format for $key";
