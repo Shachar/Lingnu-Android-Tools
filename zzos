@@ -1681,12 +1681,7 @@ sub parse_content
         }
         when( m'^\((attribute)\) 0x(.*)$' ) {
             $type=$1;
-            die "reference 0x$2 doesn't exist" if ! exists $references{hex($2)};
-            $references{hex($2)}=~'^([^:/]+):([^:/]+)/([^:/]+)$';
-            my ($package, $class, $name)=($1, $2, $3);
-            die "Attribute reference to none attribute resource $package:$class/$name"
-                    if $class ne "attr";
-            $ret="$name";
+            $ret="?".format_reference(hex($2));
         }
         default {
             die "Don't know how to parse \"$_\"";
