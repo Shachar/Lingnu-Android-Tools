@@ -556,9 +556,9 @@ sub reparse_attrib
 
     return $ret if defined $ret;
 
-    if( $bag_flags &0x0004 ) {
+    if( $bag_flags & 0x0004 ) {
         # Integer is one of the accepted types
-        return undef;
+        return sprintf "%d", $val;
     }
 
     my $strval=sprintf "%08x", $val;
