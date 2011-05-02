@@ -1311,7 +1311,8 @@ sub parse_string_value
         {
             die "Invalid string format: \"$string\"";
         }
-        print $fileref "  <string name=\"$name\">".escape_string($1)."</string>\n";
+        print $fileref "  <string name=\"$name\" formatted=\"false\" >".escape_string($1).
+                "</string>\n";
     } elsif( $type==1 ) {
         if( $string!~'^\s*\(reference\) 0x([0-9a-f]+)$' ) {
             die "Invalid string format: \"$string\"";
