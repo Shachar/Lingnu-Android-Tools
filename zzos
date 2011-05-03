@@ -37,6 +37,8 @@ my %references_flags, %framework_references_flags;
 #    value is a hash reference:
 #       Key is integer bit field or value. Value is the name of field.
 my %attrib_bags, %framework_attrib_bags;
+# Reverse hash of %references. Key is %references value, value is %references key.
+my %rev_references, %framework_rev_references;
 my $package_name, $apk_package_name, $package_ext;
 
 my %class_map=(
@@ -58,7 +60,9 @@ my %class_map=(
 $REF_PUBLIC=    0x40000000;
 $REF_HARDCODE=  0x80000000;
 $REF_INTERNAL=  0x00000001;
-$REF_SPEC=      0x00000004;
+$REF_SPEC=      0x00000002;
+$REF_RENAMED=   0x00000010;
+$REF_DUPLICATE= 0x00000020;
 
 # Attribute type bits
 %attrib_types=(
@@ -123,6 +127,7 @@ for( @framework_names ) {
     %framework_references = %references;
     %framework_references_flags = %references_flags;
     %framework_attrib_bags = %attrib_bags;
+    %framework_rev_references = %rev_references;
 }
 
 if( $#ARGV==-1 ) {
@@ -220,6 +225,7 @@ sub read_resources
     %references = %framework_references;
     %references_flags = %framework_references_flags;
     %attrib_bags = %framework_attrib_bags;
+    %rev_references = %framework_rev_references;
 
     open RESFILE, "-|", "aapt", ( "d", "--values", "resources", $apkpath ) or
             die "Failed to extract resources";
@@ -264,7 +270,22 @@ sub read_resources
                     }
                 }
 
+                if( exists $rev_references{"$package:$str"} ) {
+                    printf STDERR "Symbol 0x%08x has the same name as 0x%08x: $package:$str\n",
+                           $index, $rev_references{"$package:$str"};
+
+                    # Search for a free name to use
+                    my( $ext, $i )=("___COPY", 1);
+                    while( exists $rev_references{"$package:$str$ext$i"} ) {
+                        ++$i;
+                    }
+
+                    $str="$str$ext$i";
+                    $flags|=$REF_RENAMED|$REF_DUPLICATE;
+                }
+
                 $references{$index}="$package:$str";
+                $rev_references{"$package:$str"}=$index;
 
                 $references_flags{$index}=$flags;
             } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z\.]+):([^:/]+)/([^:]+): <bag>( \(PUBLIC\))?" )
