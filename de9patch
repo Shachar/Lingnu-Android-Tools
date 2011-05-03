@@ -66,12 +66,12 @@ end
 # quick and dirty
 xdivs_draw = ""
 (0...numXDivs).step(2) do  |i| 
-  xdivs_draw = xdivs_draw + " -draw 'line " + (xDivs[i]+1).to_s + ",0 "+(xDivs[i+1]+1).to_s + ",0'" 
+  xdivs_draw = xdivs_draw + " -draw 'line " + (xDivs[i]+1).to_s + ",0 "+(xDivs[i+1]).to_s + ",0'" 
 end
 
 ydivs_draw = ""
 (0...numYDivs).step(2) do  |i| 
-  ydivs_draw = ydivs_draw + " -draw 'line 0," + (yDivs[i]+1).to_s + " 0,"+(yDivs[i+1]+1).to_s + "'" 
+  ydivs_draw = ydivs_draw + " -draw 'line 0," + (yDivs[i]+1).to_s + " 0,"+(yDivs[i+1]).to_s + "'" 
 end
 
 `identify #{filename}` =~ /PNG (\d+)x(\d+)/
