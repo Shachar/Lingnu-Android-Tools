@@ -27,8 +27,15 @@ use POSIX;
 use feature "switch";
 
 # Hashes for tracking the cross references
+
+# The main hash. Key is integer resource number. Value is "package:class/name" string
 my %references, %framework_references;
+# Flags of resources. Key is same as above. Value is integer
 my %references_flags, %framework_references_flags;
+# Bags of attribs. Key is string "package:name". Value is reference to hash:
+#    Key is name of resource (as in %attrib_references). Value is integer, except for "flags", where
+#    value is a hash reference:
+#       Key is integer bit field or value. Value is the name of field.
 my %attrib_bags, %framework_attrib_bags;
 my $package_name, $apk_package_name, $package_ext;
 
@@ -87,7 +94,7 @@ $REF_SPEC=      0x00000004;
 $framework_references{0}="null";
 $framework_references_flags{0}=$REF_PUBLIC|$REF_HARDCODE;
 
-# Bit counting cache for num_set_bits
+# Bit counting cache for num_set_bits in 4 bit values.
 my @bitcount=( 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4 );
 
 # Resource type open file descriptors
