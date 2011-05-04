@@ -494,9 +494,9 @@ sub xml_decompile
                     die "Attribute from undeclared namespace $3: \"$_\""
                             if ! exists $namespaces{$3};
                     $attr="$3:$4";
-                    $val=parse_attribute($6, "$namespaces{$3}:$4");
+                    $val=parse_attribute($6, "$namespaces{$3}:$4", 1);
                 } elsif( $val=~'\(Raw: "(.*)"\)$' ) {
-                    $val=$1;
+                    $val=escape_string($1, 1);
                 } else {
                     die "Unparsable attribute";
                 }
@@ -877,11 +877,11 @@ sub parse_type_1f
 
 sub parse_attribute
 {
-    my ($value, $attrib)=@_;
+    my ($value, $attrib, $known_string)=@_;
 
     given( $value ) {
         when(/^.*\(Raw: "(.*)"\)$/) {
-            return $1;
+            return escape_string($1, $known_string);
         }
         when(/^\(type 0x4\)0x(.*)$/) {
             return parse_type_4($1);
@@ -1367,11 +1367,12 @@ sub parse_fraction_value
 # Accept a string as reported by aapt, and issue it in a form suitable for XML output
 sub escape_string
 {
-    my $string=$_[0];
+    my($string,$known_string)=@_;
 
     $string=~s/&/&amp;/g;
     $string=~s/</&lt;/g;
     $string=~s/>/&gt;/g;
+    $string=~s/"/u0022/g;
     $string=~s/\t/\\t/g;
     # $string=~s/ /\\u0020/g;
     $string=~s/\N{U+200e}/\\u200e/g; # LRM
@@ -1379,7 +1380,11 @@ sub escape_string
     $string=~s/^@/\\@/g;
     $string=~s/^\?/\\?/g;
 
-    return '"'.$string.'"';
+    if( ! $known_string ) {
+        return '"'.$string.'"';
+    } else {
+        return $string;
+    }
 }
 
 sub parse_string_value
