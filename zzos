@@ -1015,7 +1015,7 @@ sub dump_values
 
             ($class, $name, $type)=(undef, undef, undef);
             $state=0;
-        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):array/([^:]+): <bag>$' ) {
+        } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):array/([^:]+): <bag>( \(PUBLIC\))?$' ) {
             die "Unexpected resource value" if ! defined $configname;
 
             die "Resource define non-package value" if $2 ne $package_name;
@@ -1749,7 +1749,9 @@ sub write_public_file
 
     my $fileref = open_config_file( "public", $outdir, "", "public" );
 
-    for( keys %references ) {
+    my @keys = sort keys %references;
+
+    for( @keys ) {
         my( $key, $value )=($_, $references{$_});
 
         if( $key!=0 ) {
