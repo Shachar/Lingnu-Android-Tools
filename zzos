@@ -61,6 +61,7 @@ $REF_PUBLIC=    0x40000000;
 $REF_HARDCODE=  0x80000000;
 $REF_INTERNAL=  0x00000001;
 $REF_SPEC=      0x00000002;
+$REF_USED=      0x00000004;
 $REF_RENAMED=   0x00000010;
 $REF_DUPLICATE= 0x00000020;
 
@@ -986,7 +987,7 @@ sub dump_values
 
     my $state=0;
     my $configname=undef;
-    my ($class, $name, $type);
+    my ($class, $name, $type, $index);
     my $error;
 
     while( <RESOURCES> ) {
@@ -1006,10 +1007,10 @@ sub dump_values
             die "Resource define non-package value" if $2 ne $package_name;
             die "First time defined with value" if !exists $references{hex($1)};
             die "Inconsistent name of reference" if $references{hex($1)} ne "$2:$3/$4";
-            ($class, $name, $type)=( $3, $4, $5 );
+            ($class, $name, $type, $index)=( $3, $4, $5, hex($1) );
             $state = 1;
         } elsif( defined $name && $state==1 ) {
-            if( !parse_values( $class, $name, $type, $_, $outdir, $configname ) ) {
+            if( !parse_values( $index, $class, $name, $type, $_, $outdir, $configname ) ) {
                 return 1;
             }
 
@@ -1305,10 +1306,11 @@ sub close_pending_files
 
 sub parse_values
 {
-    my( $class, $name, $type, $string, $outdir, $configname )=@_;
+    my( $index, $class, $name, $type, $string, $outdir, $configname )=@_;
 
     die "Unknown class \"$class\"" if ! exists $class_map{$class};
 
+    $references_flags{$index} |= $REF_USED;
     if( defined $class_map{$class} ) {
         my $fileref = open_config_file( $class, $outdir, $configname );
 
@@ -1750,23 +1752,76 @@ sub write_public_file
     my $fileref = open_config_file( "public", $outdir, "", "public" );
 
     my @keys = sort keys %references;
+    # Padding related values
+    my ( $pad_start, $pad_end, $pad_base_name, $pad_class );
 
     for( @keys ) {
-        my( $key, $value )=($_, $references{$_});
+        my( $key, $value, $flags )=($_, $references{$_}, $references_flags{$_});
 
         if( $key!=0 ) {
             $value=~'([^:/]+):([^:/]+)/([^:/]+)' or die "Invalid reference value $value";
             my( $package, $class, $name )=($1, $2, $3);
 
+            if( ($flags&$REF_USED)==0 ) {
+            }
             if( $package eq $package_name ) {
                 # This is our reference
-                printf $fileref "  <public type=\"%s\" name=\"%s\" id=\"0x%x\" />\n",
-                    $class, $name, $key;
+
+                if( ($flags&$REF_USED)!=0 ) {
+                    # Emit cached padding, if any
+                    if( defined $pad_start ) {
+                        emit_public_padding( $fileref, $pad_start, $pad_end, $pad_base_name,
+                                $pad_class );
+                        $pad_start=undef;
+                    }
+
+                    printf $fileref "  <public type=\"%s\" id=\"0x%08x\" name=\"%s\" />\n",
+                           $class, $key, $name;
+                } else {
+                    # This reference was never defined, needs to be padded.
+                    if( defined $pad_start ) {
+                        # We have previous padding cached. We need to either merge or emit and cache
+
+                        $name =~ '^(.*[^0-9])([0-9]*)$';
+                        if( $key==$pad_end+1 && $class eq $pad_class && $pad_base_name==$1 ) {
+                            # The entries match - combine them
+                            $pad_end++;
+                        } else {
+                            emit_public_padding( $fileref, $pad_start, $pad_end, $pad_base_name,
+                                    $pad_class );
+                            $pad_start=undef;
+                        }
+                    }
+
+                    if( ! defined $pad_start ) {
+                        # Cache the entry for future use
+                        $pad_start=$key;
+                        $pad_end=$key;
+                        $pad_class=$class;
+                        $name =~ '^(.*[^0-9])([0-9]*)$';
+                        $pad_base_name=$1;
+                    }
+                }
             }
         }
     }
 
+    if( defined $pad_start ) {
+        # We have previous padding cached. We need to emit
+
+        emit_public_padding( $fileref, $pad_start, $pad_end, $pad_base_name, $pad_class );
+    }
+
     close_pending_files();
+}
+
+sub emit_public_padding
+{
+    my ( $fileref, $start, $end, $name, $class )=@_;
+
+    printf $fileref
+            "  <public-padding type=\"%s\" start=\"0x%08x\" name=\"%s\" end=\"0x%08x\" />\n",
+           $class, $start, $name, $end;
 }
 
 sub format_value
