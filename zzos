@@ -1026,6 +1026,7 @@ sub dump_values
             $class="array";
             $name=$3;
             $state=2;
+            $references_flags{hex($1)} |= $REF_USED;
         } elsif( $state==2 ) {
             m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
                     die "Unexpected text \"$_\" after array start";
@@ -1061,6 +1062,7 @@ sub dump_values
             $class="attr";
             $name=$3;
             $state=4;
+            $references_flags{hex($1)} |= $REF_USED;
         } elsif( $state==4 ) {
             m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
                     die "Unexpected text \"$_\" after attr start";
@@ -1093,6 +1095,7 @@ sub dump_values
             $class="style";
             $name=$3;
             $state=30;
+            $references_flags{hex($1)} |= $REF_USED;
         } elsif( $state==30 ) {
             m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
                     die "Unexpected text \"$_\" after array start";
@@ -1125,6 +1128,7 @@ sub dump_values
             $class="plurals";
             $name=$3;
             $state=40;
+            $references_flags{hex($1)} |= $REF_USED;
         } elsif( $state==40 ) {
             m'^ *Parent=0x([0-9a-f]+), Count=(\d+)$' or
                     die "Unexpected text \"$_\" after array start";
@@ -1610,6 +1614,9 @@ sub dump_attributes
                 # Only handle the attribs that belong to this package
                 my($key, $name)=($_, $2);
 
+                # Mark the attribute as used
+                $references_flags{$rev_references{"$1:attr/$2"}} |= $REF_USED;
+
                 print $fileref "  <attr name=\"$name\"";
 
                 my $bag=$attrib_bags{$key};
@@ -1666,6 +1673,7 @@ sub dump_attributes
                             die "Attrib $key references $references{$_} which is not in package"
                                     if $package ne $apk_package_name;
 
+                            $references_flags{$_} |= $REF_USED;
                             printf $fileref "    <enum name=\"$name\" value=\"%d\" />\n",
                                    make_signed($bag_flags->{$_});
                         }
@@ -1682,6 +1690,7 @@ sub dump_attributes
                             die "Attrib $key references $references{$_} which is not in package"
                                     if $package ne $apk_package_name;
 
+                            $references_flags{$_} |= $REF_USED;
                             printf $fileref "    <flag name=\"$name\" value=\"0x%x\" />\n",
                                     $bag_flags->{$_};
                         }
