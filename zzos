@@ -1762,8 +1762,6 @@ sub write_public_file
             $value=~'([^:/]+):([^:/]+)/([^:/]+)' or die "Invalid reference value $value";
             my( $package, $class, $name )=($1, $2, $3);
 
-            if( ($flags&$REF_USED)==0 ) {
-            }
             if( $package eq $package_name ) {
                 # This is our reference
 
@@ -1783,7 +1781,7 @@ sub write_public_file
                         # We have previous padding cached. We need to either merge or emit and cache
 
                         $name =~ '^(.*[^0-9])([0-9]*)$';
-                        if( $key==$pad_end+1 && $class eq $pad_class && $pad_base_name==$1 ) {
+                        if( $key==$pad_end+1 && $class eq $pad_class && $pad_base_name eq $1 ) {
                             # The entries match - combine them
                             $pad_end++;
                         } else {
