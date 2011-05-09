@@ -265,7 +265,7 @@ sub read_resources
 
                 if( exists( $references{$index} ) ) {
                     # A package sometimes defines attributes belonging to the android: package through plus
-                    if( $framework || ($reference_flags{$index} & $REF_INTERNAL) != 0 ) {
+                    if( $framework || ($references_flags{$index} & $REF_INTERNAL) != 0 ) {
                         print STDERR "$package_name $package\n";
                         die "Reference 0x$2 refers once to $references{$index} and once to $package:$str";
                     }
@@ -496,6 +496,8 @@ sub xml_decompile
                             if ! exists $namespaces{$3};
                     $attr="$3:$4";
                     $val=parse_attribute($6, "$namespaces{$3}:$4", 1);
+                } elsif( $val=~'^@0x([0-9a-f]{8})( .*)$' ) {
+                    $val="@".format_reference(hex($1));
                 } elsif( $val=~'\(Raw: "(.*)"\)$' ) {
                     $val=escape_string($1, 1);
                 } else {
