@@ -186,6 +186,11 @@ sub process_apk
         } elsif( m'^res/raw.*\.xml$' ) {
             # .xml files under raw are not compiled.
             push @ziplist, $_;
+        } elsif( m'^AndroidManifest.xml$' ) {
+            # AndroidManifest.xml is, obviously, an XML file.
+            if( !xml_decompile( $apkpath, $_, $outdir ) ) {
+                return 1;
+            }
         } elsif( m'^res/.*\.xml$' ) {
             # All other .xml files under res are compiled
             if( !xml_decompile( $apkpath, $_, $outdir ) ) {
