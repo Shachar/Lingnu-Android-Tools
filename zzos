@@ -402,7 +402,7 @@ sub xml_decompile
     print OUTFILE '<?xml version="1.0" encoding="utf-8"?>'."\n";
     my @elements=();
     my @schemas;
-    my %namespaces;
+    my %namespaces, %rev_namespaces;
     my $current_level=-1;
     my $element_open=0;
     my $line_number=0;
@@ -414,6 +414,7 @@ sub xml_decompile
         given ($_) {
             when(m'^( *)N: ([^=]+)=(http://schemas.android.com/apk/res/)(.*)$') {
                 $namespaces{$2}=$4;
+                $rev_namespaces{$4}=$2;
                 local $new_level=length $1;
                 $new_level/=2;
                 local $firstline=1;
@@ -496,8 +497,10 @@ sub xml_decompile
                             if ! exists $namespaces{$3};
                     $attr="$3:$4";
                     $val=parse_attribute($6, "$namespaces{$3}:$4", 1);
-                } elsif( $val=~'^@0x([0-9a-f]{8})( .*)$' ) {
+                } elsif( $val=~'^@0x([0-9a-f]+)( .*)$' ) {
                     $val="@".format_reference(hex($1));
+                } elsif( $val=~'^\?0x([0-9a-f]+)( .*)$' ) {
+                    $val="?".format_xml_styleref(hex($1), \%rev_namespaces);
                 } elsif( $val=~'\(Raw: "(.*)"\)$' ) {
                     $val=escape_string($1, 1);
                 } else {
@@ -1912,4 +1915,24 @@ sub format_reference
     }
 
     return $ret;
+}
+
+sub format_xml_styleref
+{
+    my( $index, $translation )=@_;
+
+    exists( $references{$index} ) or
+            die sprintf "Attribute points to theme resource 0x%08x which doesn't exist", $index;
+
+    $references{$index} =~ '^([^:/]+):([^:/]+)/([^:/]+)$' or
+            die "Invalid reference $references{$index}";
+
+
+    my( $package, $class, $name )=($1, $2, $3);
+
+    exists $translation->{$package} or
+            die "Attribute $references{$index} belongs to undefined namespace";
+    $class eq "attr" or die "Style reference not to attribute $references{$index}";
+
+    return "$translation->{$package}:attr/$name";
 }
