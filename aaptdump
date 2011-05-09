@@ -1,0 +1,74 @@
+#!/usr/bin/perl
+
+use File::Path qw(make_path);
+use File::Basename;
+
+# Create under current directory
+while( $apkpath=shift ) {
+    my ($apkname, $apkdir ) = fileparse( $apkpath, ( ".apk" ) );
+    print "Dumping $apkname\n";
+
+    if( !mkdir "$apkname" ) {
+        print STDERR "Failed to create directory $apkname: $!\n";
+        return 1;
+    }
+
+    open( RESOURCES, "-|", "aapt", ("d", "--values", "resources", $apkpath) )
+            or die "Failed to read resources";
+    open( OUTPUT, ">", "$apkname/resources.txt" )
+            or die "Faile to create $apkname/resources.txt: $!";
+
+    while( <RESOURCES> ) {
+        chomp;
+        if( m/^\s*resource 0x.* \(PUBLIC\)$/ ) {
+            s/ \(PUBLIC\)$//;
+        } elsif( s/ flags=0x4([0-9a-f]{7})$/ flags=0x0\1/ ) {
+        } elsif( m/^\s*resource 0x.*: t=0x03 d=0x[0-9a-f]{8} \(s=0x[0-9a-f]{4} r=0x[0-9a-f]{2}\)$/ )
+        {
+            s/: t=0x03 d=0x[0-9a-f]{8} /: t=0x03 d=0x00000000 /;
+        }
+
+        print OUTPUT "$_\n";
+    }
+
+    close OUTPUT;
+    close RESOURCES;
+
+    open( APKLIST, "-|", "aapt", ("l", $apkpath))
+            or die "Failed to open APK list";
+
+    while( <APKLIST> ) {
+        chomp;
+        my $file=$_;
+
+        if( m'^res/raw.*\.xml$' ) {
+        } elsif( m'^res/.*\.xml$' ) {
+            xml_dump( $apkpath, $_, $apkname );
+        } elsif( m'^res/(xml|anim|layout|menu)' ) {
+            # ALL files under those directories are xml
+            xml_dump( $apkpath, $_, $apkname );
+        }
+    }
+}
+
+sub xml_dump
+{
+    my( $apkpath, $filename, $outdir ) = @_;
+    my $error;
+
+    make_path( dirname("$outdir/$filename"), { error => \$error } );
+
+    open XMLFILE, "-|", "aapt", ("d", "xmltree", $apkpath, $filename)
+            or die "Failed to dump XML tree $filename";
+    open OUTFILE, ">", "$outdir/$filename"
+            or die "Faile to create output file $outdir/$filename: $!";
+
+    while( <XMLFILE> ) {
+        chomp;
+
+        print OUTFILE "$_\n";
+    }
+
+    close XMLFILE;
+    close OUTFILE;
+}
