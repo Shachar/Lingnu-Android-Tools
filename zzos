@@ -1326,7 +1326,10 @@ sub parse_values
 {
     my( $index, $class, $name, $type, $string, $outdir, $configname )=@_;
 
-    die "Unknown class \"$class\"" if ! exists $class_map{$class};
+    if( ! exists $class_map{$class} ) {
+        print STDERR "Project defines non-standard class \"$class\"\n";
+        $class_map{$class}=\&parse_unknown_value;
+    }
 
     $references_flags{$index} |= $REF_USED;
     if( defined $class_map{$class} ) {
@@ -1336,6 +1339,16 @@ sub parse_values
     }
 
     return 1;
+}
+
+sub parse_unknown_value
+{
+    my( $name, $type, $string, $class )=@_;
+
+    $type=hex($type);
+    my $fileref = $type_files{$class};
+    print $fileref "  <item type=\"$class\" name=\"$name\">".format_value($string, $type).
+            "</item>\n";
 }
 
 sub parse_id_value
