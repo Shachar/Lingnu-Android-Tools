@@ -1,0 +1,85 @@
+#!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
+
+# de9patch - decompile Android 9-patched png compiled with aapt
+# Copyright (C) 2011 Lingnu Open Source Consulting Ltd.
+# Started by Rafał Rzepecki, Forked by Asaf Ohaion
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License along
+#    with this program; if not, write to the Free Software Foundation, Inc.,
+#    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+
+
+# Original Header:
+
+# Rafał Rzepecki 
+# public domain
+#
+# deserializes metadata of 9-patch png file
+# optionally writes out png with 9-patch info embedded (needs imagemagick for that)
+#
+# quick and dirty hack, no error handling, almost no test, YMMV
+#
+# for format specs see android/platform/frameworks/base/libs/utils/ResourceTypes.cpp
+# (in android platform source)
+
+if ARGV.length == 0
+    print "Usage: #{__FILE__} <serialized nine-patch png file> [optional output png with inline 9-patch info]\n"
+    exit 1
+end
+
+filename = ARGV[0]
+png = File.open(filename) { |f|f.read }
+index = png.index 'npTc'
+len = png[(index-4)..index].unpack('N1')[0]
+data = png[(index+4)..(index+4+len)]
+wasDeserialized, numXDivs, numYDivs, numColors = data[0...4].unpack('C4')
+paddings = data[12...(12+16)].unpack('N4') #left right top bottom
+data.slice!(0...32)
+xDivs = data.unpack("N#{numXDivs}")
+data.slice!(0...(4*numXDivs))
+yDivs = data.unpack("N#{numYDivs}")
+data.slice!(0...(4*numYDivs))
+colors = data.unpack("N#{numColors}")
+
+print "was deserialized: #{wasDeserialized}
+paddings: #{paddings.join(', ')}
+xdivs: #{xDivs.join(', ')}
+ydivs: #{yDivs.join(', ')}
+colors: #{colors.map{|c| "#%08x"%c}.join(', ')} \n"
+
+if ARGV.length == 1
+    exit 0
+end
+
+# quick and dirty
+xdivs_draw = ""
+(0...numXDivs).step(2) do  |i| 
+  xdivs_draw = xdivs_draw + " -draw 'line " + (xDivs[i]+1).to_s + ",0 "+(xDivs[i+1]).to_s + ",0'" 
+end
+
+ydivs_draw = ""
+(0...numYDivs).step(2) do  |i| 
+  ydivs_draw = ydivs_draw + " -draw 'line 0," + (yDivs[i]+1).to_s + " 0,"+(yDivs[i+1]).to_s + "'" 
+end
+
+`identify #{filename}` =~ /PNG (\d+)x(\d+)/
+w, h = $1.to_i, $2.to_i
+`convert #{filename} -bordercolor white -compose Copy -border 1x1 -stroke black \
+#{xdivs_draw} \
+#{ydivs_draw} \
+-draw 'line #{paddings[0] + 1},#{h + 1} #{w - paddings[1]},#{h+1}' \
+-draw 'line #{w+1},#{paddings[2] + 1} #{w+1},#{h - paddings[3]}' \
+#{ARGV[1]}`
+
