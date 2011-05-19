@@ -162,7 +162,7 @@ sub process_apk
 
     set_package_name( $apkpath );
     # List of files to be unzipped as they are
-    my @ziplist, %rename_list;
+    my @ziplist, @patch9list, %rename_list;
     print STDOUT "Processing $apkpath\n";
 
     if( ! read_resources( $apkpath, $outdir, 0 ) ) {
@@ -197,10 +197,14 @@ sub process_apk
                 return 1;
             }
         } elsif( m'^res/(xml|anim|layout|menu)' ) {
-            # ALL files under those directories are xml
+            # ALL files under those directories are xmls, regardless of extension
             if( !xml_decompile( $apkpath, $_, $outdir ) ) {
                 return 1;
             }
+        } elsif( m'^res/drawable.*\.9\.png$' ) {
+            # 9Patch png's need to be decompiled after being extracted
+            push @ziplist, $_;
+            push @patch9list, $_;
         } else {
             push @ziplist, $_;
         }
@@ -219,12 +223,26 @@ sub process_apk
     # Extract all of the files that need simple extraction
     system "unzip", ( "-q", $apkpath, @ziplist, "-d", $outdir );
 
+    # De9patch all relevant files
+    de9patch( $outdir, \@patch9list );
+
     # Rename incorrectly named directories
     for( keys %rename_list ) {
         rename "$outdir/$_", "$outdir/$rename_list{$_}";
     }
 
     return dump_values( $apkpath, $outdir );
+}
+
+sub de9patch
+{
+    my( $outdir, $filelist )=@_;
+
+    for( @$filelist ) {
+        system "de9patch", ( "$outdir/$_", "$outdir/$_.tmp" )
+                or die "Failed to decompile $_";
+        rename "$outdir/$_.tmp", "$outdir/$_";
+    }
 }
 
 sub read_resources
