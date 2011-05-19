@@ -239,9 +239,11 @@ sub de9patch
     my( $outdir, $filelist )=@_;
 
     for( @$filelist ) {
-        system "de9patch", ( "$outdir/$_", "$outdir/$_.tmp" )
+        print "  Decompiling $_\n";
+        (system "de9patch", ( "$outdir/$_", "$outdir/$_.tmp" ))==0
                 or die "Failed to decompile $_";
-        rename "$outdir/$_.tmp", "$outdir/$_";
+        rename "$outdir/$_.tmp", "$outdir/$_"
+                or die "Failed to rename: $!";
     }
 }
 
