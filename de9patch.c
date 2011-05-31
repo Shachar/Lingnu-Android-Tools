@@ -257,13 +257,13 @@ void add_paddings(npTc_block * np_block)
     int i;
     
     //  padding left / right
-    for (i = np_block->padding_left*4; i < (width - np_block->padding_right)*4; i+=4) {
+    for (i = (np_block->padding_left+1)*4; i < (width - np_block->padding_right-1)*4; i+=4) {
 	png_bytep pix = &(row_pointers[height-1][i]);
 	pix[3] = 255;
     }
 
     //  padding bottom / top
-    for (i = np_block->padding_bottom; i <= (height - np_block->padding_top); i++) {
+    for (i = np_block->padding_bottom+1; i < (height - np_block->padding_top-1); i++) {
 	png_bytep pix = &(row_pointers[i][(width-1)*4]);
 	pix[3] = 255;
     }
