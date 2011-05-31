@@ -32,7 +32,7 @@ void usage(char * progname)
 void fail(char * message)
 {
     fprintf(stderr, "%s\n", message);
-	exit(10);
+    exit(10);
 }
 
 int read_chunk_custom(png_structp ptr, png_unknown_chunkp chunk) 

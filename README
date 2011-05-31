@@ -30,5 +30,7 @@ zzos - the reverse of aapt. Decompile the resources of an apk to a format
     suitable for recompilation using aapt. "zzos" is "aapt" shifted one
     letter down.
 
-de9patch    - deserializes metadata of 9-patch png file
-	  optionally writes out png with 9-patch info embedded (needs imagemagick for that)
+de9patch    - deserializes metadata of 9-patch compiled png file, writes out original 9-patch png
+
+xmlindent - buetify xml file
+
