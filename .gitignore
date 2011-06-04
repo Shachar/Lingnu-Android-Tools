@@ -2,3 +2,5 @@ split_bootimg
 new_strings
 .*.swp
 tags
+de9patch
+xmlindent
