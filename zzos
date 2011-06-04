@@ -113,15 +113,17 @@ zzos [options] apk...
 Options:
 --framework     Given APK provides framework for this APK
 --output        directory where to create the extracted APK dirs. Default is current directory.
+--nosubdir      "output" specifies the actual directory to create.
 EOM
     exit 1;
 }
 
-my (@framework_names, $outdir);
+my (@framework_names, $outdir, $nosubdir);
 
 $outdir=".";
 
-GetOptions("framework=s" => \@framework_names, "output=s" => \$outdir ) or help();
+GetOptions("framework=s" => \@framework_names, "output=s" => \$outdir, "nosubdir" => \$nosubdir )
+    or help();
 
 for( @framework_names ) {
     read_resources( $_, $outdir, 1 ) or die "Failed to read framework resources for $_";
@@ -143,7 +145,10 @@ while( $apkpath = shift @ARGV ) {
     # For each APK to be processed
     my ($apkname, $apkdir ) = fileparse( $apkpath, ( ".apk" ) );
 
-    if( process_apk( $apkpath, "$outdir/$apkname" ) ) {
+    my $real_outdir="$outdir";
+    $real_outdir.="/$apkname" if ! $nosubdir;
+    
+    if( process_apk( $apkpath, "$real_outdir" ) ) {
         $delayed_fail = 1;
         print STDERR "process_apk failed for $apkname\n";
     }
