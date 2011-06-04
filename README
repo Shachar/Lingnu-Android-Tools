@@ -29,3 +29,8 @@ new_strings - has 2 functions:
 zzos - the reverse of aapt. Decompile the resources of an apk to a format
     suitable for recompilation using aapt. "zzos" is "aapt" shifted one
     letter down.
+
+de9patch    - deserializes metadata of 9-patch compiled png file, writes out original 9-patch png
+
+xmlindent - buetify xml file
+

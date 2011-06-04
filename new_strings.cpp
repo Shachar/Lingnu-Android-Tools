@@ -1,4 +1,4 @@
-// newstrings.c
+// newstrings.cpp
 
 #include <cstring>
 #include <iostream>
