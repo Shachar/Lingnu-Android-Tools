@@ -17,7 +17,7 @@ typedef struct npTc_block_t {
     int padding_bottom;
 } npTc_block;
 
-int width, height;
+int width, height, found_nptc_chunk = 0;
 png_bytep * row_pointers;
 png_byte color_type;
 png_byte bit_depth;
@@ -41,6 +41,8 @@ int read_chunk_custom(png_structp ptr, png_unknown_chunkp chunk)
 
     if (strcmp(chunk->name, "npTc")) 
 	return 0;
+    
+    found_nptc_chunk = 1;
 
     npTc_block * np_block = (npTc_block *)png_get_user_chunk_ptr(ptr);
     np_block->numXDivs = chunk->data[1];
@@ -55,7 +57,9 @@ int read_chunk_custom(png_structp ptr, png_unknown_chunkp chunk)
     np_block->padding_right = ntohl(np_block->padding_right);
     np_block->padding_top = ntohl(np_block->padding_top);
     np_block->padding_bottom = ntohl(np_block->padding_bottom);
-
+    printf("padding left(%d), right(%d), bottom(%d), top(%d)\n",
+	   np_block->padding_left, np_block->padding_right,
+	   np_block->padding_bottom, np_block->padding_top);
     int i;    
 
     // XDivs
@@ -259,12 +263,14 @@ void add_paddings(npTc_block * np_block)
     //  padding left / right
     for (i = (np_block->padding_left+1)*4; i < (width - np_block->padding_right-1)*4; i+=4) {
 	png_bytep pix = &(row_pointers[height-1][i]);
+	pix[0] = pix[1] = pix[2] = 0;
 	pix[3] = 255;
     }
 
     //  padding bottom / top
     for (i = np_block->padding_bottom+1; i < (height - np_block->padding_top-1); i++) {
 	png_bytep pix = &(row_pointers[i][(width-1)*4]);
+	pix[0] = pix[1] = pix[2] = 0;
 	pix[3] = 255;
     }
 
@@ -278,6 +284,9 @@ int main(int argc, char * argv[])
     npTc_block np_block;
 
     read_png_file(argv[1], &np_block);
+
+    if (!found_nptc_chunk)
+	fail("PNG does not contain npTc chunk");
     
     add_borders();
     add_patches(&np_block);
