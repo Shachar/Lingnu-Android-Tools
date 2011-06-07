@@ -4,7 +4,12 @@
 #define PNG_DEBUG 3
 #include <png.h>
 
-#define PIXEL_BYTES 2
+#define COLOR_TYPE_GRAYSCALE       0
+#define COLOR_TYPE_RGB             2
+#define COLOR_TYPE_PALLETE         3
+#define COLOR_TYPE_GRAYSCALE_ALPHA 4
+#define COLOR_TYPE_RGB_ALPHA       6
+
 
 typedef struct npTc_block_t {
     char wasDeserialized;
@@ -23,6 +28,7 @@ int width, height, found_nptc_chunk = 0;
 png_bytep * row_pointers;
 png_byte color_type;
 png_byte bit_depth;
+int bytes_per_pixel;
 
 
 void usage(char * progname)
@@ -120,6 +126,30 @@ void read_png_file(char * filename,  npTc_block * np_block)
     height = png_get_image_height(png_ptr, info_ptr);
     color_type = png_get_color_type(png_ptr, info_ptr);
     bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+
+    switch (color_type) 
+	{
+	case COLOR_TYPE_GRAYSCALE:
+	    if (bit_depth < 8)
+		bytes_per_pixel = 1;
+	    else
+		bytes_per_pixel = bit_depth/8;
+	    break;
+	case COLOR_TYPE_RGB:
+	    bytes_per_pixel = (bit_depth/8)*3;
+	    break;
+	case COLOR_TYPE_PALLETE:
+	    fail("png pallete color type support not implemented yet");
+	    break;
+	case COLOR_TYPE_GRAYSCALE_ALPHA:
+	    bytes_per_pixel = (bit_depth/8)*2;
+	    break;
+	case COLOR_TYPE_RGB_ALPHA:
+	    bytes_per_pixel = (bit_depth/8)*4;
+	    break;
+	}
+
+    printf("bytes per pixel : %d \n", bytes_per_pixel);
     
     number_of_passes = png_set_interlace_handling(png_ptr);
     png_read_update_info(png_ptr, info_ptr);
@@ -202,10 +232,10 @@ void add_borders()
     {
 	int y;
 	for (y=0; y<height; y++) {
-	    png_byte tmp[PIXEL_BYTES];
-	    memcpy(tmp, &row_pointers[y][col1], PIXEL_BYTES);
-	    memcpy(&row_pointers[y][col1], &row_pointers[y][col2], PIXEL_BYTES);
-	    memcpy(&row_pointers[y][col2], tmp, PIXEL_BYTES);
+	    png_byte tmp[bytes_per_pixel];
+	    memcpy(tmp, &row_pointers[y][col1], bytes_per_pixel);
+	    memcpy(&row_pointers[y][col1], &row_pointers[y][col2], bytes_per_pixel);
+	    memcpy(&row_pointers[y][col2], tmp, bytes_per_pixel);
 	}
     }
 
@@ -214,22 +244,22 @@ void add_borders()
     // extend width
     width +=2;
     for (y=0; y < height; y++) {
-	row_pointers[y] = realloc(row_pointers[y], sizeof(png_byte)*width*PIXEL_BYTES);
-	memset(&row_pointers[y][(width-1)*PIXEL_BYTES], 0, PIXEL_BYTES);
-	memset(&row_pointers[y][(width-2)*PIXEL_BYTES], 0, PIXEL_BYTES);
+	row_pointers[y] = realloc(row_pointers[y], sizeof(png_byte)*width*bytes_per_pixel);
+	memset(&row_pointers[y][(width-1)*bytes_per_pixel], 0, bytes_per_pixel);
+	memset(&row_pointers[y][(width-2)*bytes_per_pixel], 0, bytes_per_pixel);
     }
     
     // center vertically
-    for (x = (width-1)*PIXEL_BYTES; x>0; x -= PIXEL_BYTES)
-	swap_columns(x, x-PIXEL_BYTES); 
+    for (x = (width-1)*bytes_per_pixel; x>0; x -= bytes_per_pixel)
+	swap_columns(x, x-bytes_per_pixel); 
 
     // extend height
     height  +=2;
     row_pointers = (png_bytep*) realloc(row_pointers, sizeof(png_bytep) * height);
-    row_pointers[height-2] =  malloc(sizeof(png_byte)*width*PIXEL_BYTES);
-    row_pointers[height-1] =  malloc(sizeof(png_byte)*width*PIXEL_BYTES);
-    memset(&row_pointers[height-2][0], 0, width*PIXEL_BYTES);
-    memset(&row_pointers[height-1][0], 0, width*PIXEL_BYTES);
+    row_pointers[height-2] =  malloc(sizeof(png_byte)*width*bytes_per_pixel);
+    row_pointers[height-1] =  malloc(sizeof(png_byte)*width*bytes_per_pixel);
+    memset(&row_pointers[height-2][0], 0, width*bytes_per_pixel);
+    memset(&row_pointers[height-1][0], 0, width*bytes_per_pixel);
 
     // center horizontally
     for (y=height-2; y>0; y--) {
@@ -246,15 +276,15 @@ void add_patches(npTc_block * np_block)
     // XDivs
     for (i=0; i < np_block->numXDivs; i+=2)
 	for (j=np_block->XDivs[i]; j < np_block->XDivs[i+1]; j++)	{
-	    png_bytep pix = &(row_pointers[0][(j+1)*PIXEL_BYTES]);
-	    pix[PIXEL_BYTES-1] = 255;
+	    png_bytep pix = &(row_pointers[0][(j+1)*bytes_per_pixel]);
+	    pix[bytes_per_pixel-1] = 255;
 	}
 
     // YDivs
     for (i=0; i < np_block->numYDivs; i+=2)
 	for (j=np_block->YDivs[i]; j < np_block->YDivs[i+1]; j++)	{
 	    png_bytep pix = &(row_pointers[(j+1)][0]);		
-	    pix[PIXEL_BYTES-1] = 255;	    
+	    pix[bytes_per_pixel-1] = 255;	    
 	}
 }
 
@@ -263,15 +293,15 @@ void add_paddings(npTc_block * np_block)
     int i;
     
     //  padding left / right
-    for (i = (np_block->padding_left+1)*PIXEL_BYTES; i < (width - np_block->padding_right-1)*PIXEL_BYTES; i+=PIXEL_BYTES) {
+    for (i = (np_block->padding_left+1)*bytes_per_pixel; i < (width - np_block->padding_right-1)*bytes_per_pixel; i+=bytes_per_pixel) {
 	png_bytep pix = &(row_pointers[height-1][i]);
-	pix[PIXEL_BYTES-1] = 255;
+	pix[bytes_per_pixel-1] = 255;
     }
 
     //  padding bottom / top
     for (i = np_block->padding_bottom+1; i < (height - np_block->padding_top-1); i++) {
-	png_bytep pix = &(row_pointers[i][(width-1)*PIXEL_BYTES]);
-	pix[PIXEL_BYTES-1] = 255;
+	png_bytep pix = &(row_pointers[i][(width-1)*bytes_per_pixel]);
+	pix[bytes_per_pixel-1] = 255;
     }
 
 }
