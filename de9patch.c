@@ -1,8 +1,34 @@
+// de9patch - decompile 9-patch png
+// Copyright (C) 2011 Lingnu Open Source Consulting Ltd.
+// Written by Asaf Ohaion
+//
+//    This program is free software; you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation; either version 2 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License along
+//    with this program; if not, write to the Free Software Foundation, Inc.,
+//    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+//
+
 #include <stdio.h>
 #include <stdlib.h>
 
 #define PNG_DEBUG 3
 #include <png.h>
+
+#define COLOR_TYPE_GRAYSCALE       0
+#define COLOR_TYPE_RGB             2
+#define COLOR_TYPE_PALLETE         3
+#define COLOR_TYPE_GRAYSCALE_ALPHA 4
+#define COLOR_TYPE_RGB_ALPHA       6
+
 
 typedef struct npTc_block_t {
     char wasDeserialized;
@@ -17,10 +43,11 @@ typedef struct npTc_block_t {
     int padding_bottom;
 } npTc_block;
 
-int width, height;
+int width, height, found_nptc_chunk = 0;
 png_bytep * row_pointers;
 png_byte color_type;
 png_byte bit_depth;
+int bytes_per_pixel;
 
 
 void usage(char * progname)
@@ -41,6 +68,8 @@ int read_chunk_custom(png_structp ptr, png_unknown_chunkp chunk)
 
     if (strcmp(chunk->name, "npTc")) 
 	return 0;
+    
+    found_nptc_chunk = 1;
 
     npTc_block * np_block = (npTc_block *)png_get_user_chunk_ptr(ptr);
     np_block->numXDivs = chunk->data[1];
@@ -55,7 +84,9 @@ int read_chunk_custom(png_structp ptr, png_unknown_chunkp chunk)
     np_block->padding_right = ntohl(np_block->padding_right);
     np_block->padding_top = ntohl(np_block->padding_top);
     np_block->padding_bottom = ntohl(np_block->padding_bottom);
-
+    printf("padding left(%d), right(%d), bottom(%d), top(%d)\n",
+	   np_block->padding_left, np_block->padding_right,
+	   np_block->padding_bottom, np_block->padding_top);
     int i;    
 
     // XDivs
@@ -114,6 +145,30 @@ void read_png_file(char * filename,  npTc_block * np_block)
     height = png_get_image_height(png_ptr, info_ptr);
     color_type = png_get_color_type(png_ptr, info_ptr);
     bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+
+    switch (color_type) 
+	{
+	case COLOR_TYPE_GRAYSCALE:
+	    if (bit_depth < 8)
+		bytes_per_pixel = 1;
+	    else
+		bytes_per_pixel = bit_depth/8;
+	    break;
+	case COLOR_TYPE_RGB:
+	    bytes_per_pixel = (bit_depth/8)*3;
+	    break;
+	case COLOR_TYPE_PALLETE:
+	    fail("png pallete color type support not implemented yet");
+	    break;
+	case COLOR_TYPE_GRAYSCALE_ALPHA:
+	    bytes_per_pixel = (bit_depth/8)*2;
+	    break;
+	case COLOR_TYPE_RGB_ALPHA:
+	    bytes_per_pixel = (bit_depth/8)*4;
+	    break;
+	}
+
+    printf("bytes per pixel : %d \n", bytes_per_pixel);
     
     number_of_passes = png_set_interlace_handling(png_ptr);
     png_read_update_info(png_ptr, info_ptr);
@@ -196,10 +251,10 @@ void add_borders()
     {
 	int y;
 	for (y=0; y<height; y++) {
-	    png_byte tmp[4];
-	    memcpy(tmp, &row_pointers[y][col1], 4);
-	    memcpy(&row_pointers[y][col1], &row_pointers[y][col2], 4);
-	    memcpy(&row_pointers[y][col2], tmp,4);
+	    png_byte tmp[bytes_per_pixel];
+	    memcpy(tmp, &row_pointers[y][col1], bytes_per_pixel);
+	    memcpy(&row_pointers[y][col1], &row_pointers[y][col2], bytes_per_pixel);
+	    memcpy(&row_pointers[y][col2], tmp, bytes_per_pixel);
 	}
     }
 
@@ -208,29 +263,29 @@ void add_borders()
     // extend width
     width +=2;
     for (y=0; y < height; y++) {
-	row_pointers[y] = realloc(row_pointers[y], sizeof(png_byte)*width*4);
-	memset(&row_pointers[y][(width-1)*4], 0, 4);
-	memset(&row_pointers[y][(width-2)*4], 0, 4);
+	row_pointers[y] = realloc(row_pointers[y], sizeof(png_byte)*width*bytes_per_pixel);
+	memset(&row_pointers[y][(width-1)*bytes_per_pixel], 0, bytes_per_pixel);
+	memset(&row_pointers[y][(width-2)*bytes_per_pixel], 0, bytes_per_pixel);
     }
     
     // center vertically
-    for (x=width*4-4; x >0; x-=4)
-	swap_columns(x, x-4); 
+    for (x = (width-1)*bytes_per_pixel; x>0; x -= bytes_per_pixel)
+	swap_columns(x, x-bytes_per_pixel); 
 
     // extend height
     height  +=2;
     row_pointers = (png_bytep*) realloc(row_pointers, sizeof(png_bytep) * height);
-    row_pointers[height-2] =  malloc(sizeof(png_byte)*width*4);
-    row_pointers[height-1] =  malloc(sizeof(png_byte)*width*4);
-    memset(&row_pointers[height-2][0], 0, width*4);
-    memset(&row_pointers[height-1][0], 0, width*4);
+    row_pointers[height-2] =  malloc(sizeof(png_byte)*width*bytes_per_pixel);
+    row_pointers[height-1] =  malloc(sizeof(png_byte)*width*bytes_per_pixel);
+    memset(&row_pointers[height-2][0], 0, width*bytes_per_pixel);
+    memset(&row_pointers[height-1][0], 0, width*bytes_per_pixel);
 
     // center horizontally
     for (y=height-2; y>0; y--) {
 	png_bytep tmp = row_pointers[y];
 	row_pointers[y] = row_pointers[y-1];
 	row_pointers[y-1] = tmp;
-    }
+    }    
 }
 
 void add_patches(npTc_block * np_block)
@@ -240,15 +295,15 @@ void add_patches(npTc_block * np_block)
     // XDivs
     for (i=0; i < np_block->numXDivs; i+=2)
 	for (j=np_block->XDivs[i]; j < np_block->XDivs[i+1]; j++)	{
-	    png_bytep pix = &(row_pointers[0][(j+1)*4]);
-	    pix[3] = 255;
+	    png_bytep pix = &(row_pointers[0][(j+1)*bytes_per_pixel]);
+	    pix[bytes_per_pixel-1] = 255;
 	}
 
     // YDivs
     for (i=0; i < np_block->numYDivs; i+=2)
 	for (j=np_block->YDivs[i]; j < np_block->YDivs[i+1]; j++)	{
 	    png_bytep pix = &(row_pointers[(j+1)][0]);		
-	    pix[3] = 255;	    
+	    pix[bytes_per_pixel-1] = 255;	    
 	}
 }
 
@@ -257,15 +312,15 @@ void add_paddings(npTc_block * np_block)
     int i;
     
     //  padding left / right
-    for (i = (np_block->padding_left+1)*4; i < (width - np_block->padding_right-1)*4; i+=4) {
+    for (i = (np_block->padding_left+1)*bytes_per_pixel; i < (width - np_block->padding_right-1)*bytes_per_pixel; i+=bytes_per_pixel) {
 	png_bytep pix = &(row_pointers[height-1][i]);
-	pix[3] = 255;
+	pix[bytes_per_pixel-1] = 255;
     }
 
     //  padding bottom / top
     for (i = np_block->padding_bottom+1; i < (height - np_block->padding_top-1); i++) {
-	png_bytep pix = &(row_pointers[i][(width-1)*4]);
-	pix[3] = 255;
+	png_bytep pix = &(row_pointers[i][(width-1)*bytes_per_pixel]);
+	pix[bytes_per_pixel-1] = 255;
     }
 
 }
@@ -278,6 +333,9 @@ int main(int argc, char * argv[])
     npTc_block np_block;
 
     read_png_file(argv[1], &np_block);
+
+    if (!found_nptc_chunk)
+	fail("PNG does not contain npTc chunk");
     
     add_borders();
     add_patches(&np_block);
