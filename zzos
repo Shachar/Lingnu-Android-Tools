@@ -1217,33 +1217,55 @@ sub parse_config_name
     # The order here is important! See http://developer.android.com/guide/topics/resources/providing-resources.html#AlternativeResources
 
     if( $string=~/mcc=(\d+)/ ) {
+        # MCC code
         $ret.="-mcc$1";
     }
     if( $string=~/mnc=(\d+)/ ) {
+        # MNC code, must come after MCC
         $ret.="-mnc$1";
     }
     if( $string=~/lang=([a-z]+)/ ) {
+        # Language
         $ret.="-$1";
     }
+    if( $string=~/swdp=([0-9]+)/ ) {
+        # Smallest Width
+        $ret.="-sw$1dp";
+    }
+    if( $string=~/wdp=([0-9]+)/ ) {
+        # Available width
+        $ret.="-w$1dp";
+    }
+    if( $string=~/hdp=([0-9]+)/ ) {
+        # Available height
+        $ret.="-h$1dp";
+    }
     if( $string=~/cnt=([A-Z]+)/ ) {
+        # Country, must come after language
         $ret.="-r$1";
     }
     if( $string=~/sz=(\d+) \((\S+)\)/ ) {
+        # Screen size
         $ret.="-$2";
     }
     if( $string=~/lng=(\d+) \((\S+)\)/ ) {
+        # Long vs. Normal screen
         $ret.="-$2";
     }
     if( $string=~/orient=(\d+) \((\S+)\)/ ) {
+        # Screen orientation
         $ret.="-$2";
     }
     if( $string=~/type=(\d+) \((\S+)\)/ ) {
+        # Type - car or desk
         $ret.="-$2";
     }
     if( $string=~/night=(\d+) \((\S+)\)/ ) {
+        # Daytime - night vs. day (notnight)
         $ret.="-$2";
     }
     if( $string=~/density=(\S+)/ ) {
+        # Screen pixel density
         if( $1==120 ) {
             $ret.="-ldpi";
         } elsif( $1==160 ) {
@@ -1259,9 +1281,11 @@ sub parse_config_name
         }
     }
     if( $string=~/touch=(\d+) \((\S+)\)/ ) {
+        # Touch vs. Stylus
         $ret.="-$2";
     }
     if( $string=~/keyhid=(\d+) \((\S+)\)/ ) {
+        # Keyboard availability
         if( $1==1 ) {
             $ret.="-keysexposed";
         } elsif( $1==2 ) {
@@ -1273,9 +1297,11 @@ sub parse_config_name
         }
     }
     if( $string=~/kbd=(\d+) \((\S+)\)/ ) {
+        # Primary input method
         $ret.="-$2";
     }
     if( $string=~/navhid=(\d+) \((\S+)\)/ ) {
+        # Navigation keys status
         if( $1==4 ) {
             $ret.="-navexposed";
         } elsif( $1==8 ) {
@@ -1285,14 +1311,17 @@ sub parse_config_name
         }
     }
     if( $string=~/nav=(\d+) \((\S+)\)/ ) {
+        # Primary non-touch navigation method
         $ret.="-$2";
     }
     if( $string=~/w=(\d+) h=(\d+)/ ) {
-        # Dropped from the documentation as if it never existed
+        # Dropped from the documentation as if it never existed:
+        # Screen width and height
         $ret.="-$1x$2";
     }
     if( $string=~/sdk=(\d+)/ ) {
         # XXX Might add code to not print if minimal version dictated by other attributes
+        # Minimal SDK version
         $ret.="-v$1";
     }
 
