@@ -1045,7 +1045,8 @@ sub dump_values
 
             die "Resource define non-package value" if $2 ne $package_name;
             die "First time defined with value" if !exists $references{hex($1)};
-            die "Inconsistent name of reference" if $references{hex($1)} ne "$2:$3/$4";
+            die "Inconsistent name of reference: $2:$3/$4 ne $references{hex($1)}"
+                    if $references{hex($1)} ne "$2:$3/$4";
             ($class, $name, $type, $index)=( $3, $4, $5, hex($1) );
             $state = 1;
         } elsif( defined $name && $state==1 ) {
