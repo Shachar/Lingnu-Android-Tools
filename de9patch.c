@@ -64,7 +64,7 @@ void fail(char * message)
 
 int read_chunk_custom(png_structp ptr, png_unknown_chunkp chunk) 
 {
-    printf("read_chunk_custom %s (size %d)\n", chunk->name, chunk->size);
+    // printf("read_chunk_custom %s (size %d)\n", chunk->name, chunk->size);
 
     if (strcmp(chunk->name, "npTc")) 
 	return 0;
@@ -84,9 +84,9 @@ int read_chunk_custom(png_structp ptr, png_unknown_chunkp chunk)
     np_block->padding_right = ntohl(np_block->padding_right);
     np_block->padding_top = ntohl(np_block->padding_top);
     np_block->padding_bottom = ntohl(np_block->padding_bottom);
-    printf("padding left(%d), right(%d), bottom(%d), top(%d)\n",
-	   np_block->padding_left, np_block->padding_right,
-	   np_block->padding_bottom, np_block->padding_top);
+    //printf("padding left(%d), right(%d), bottom(%d), top(%d)\n",
+    //        np_block->padding_left, np_block->padding_right,
+    //        np_block->padding_bottom, np_block->padding_top);
     int i;    
 
     // XDivs
@@ -168,7 +168,7 @@ void read_png_file(char * filename,  npTc_block * np_block)
 	    break;
 	}
 
-    printf("bytes per pixel : %d \n", bytes_per_pixel);
+    // printf("bytes per pixel : %d \n", bytes_per_pixel);
     
     number_of_passes = png_set_interlace_handling(png_ptr);
     png_read_update_info(png_ptr, info_ptr);
