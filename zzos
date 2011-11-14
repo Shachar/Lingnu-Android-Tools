@@ -480,6 +480,40 @@ sub xml_decompile
                 $elements[$new_level]="";
                 push( @schemas, "xmlns:$2=\"$3$4\"");
             }
+            when(m'^( *)N: ([^=]+)=(.*)$') {
+                $namespaces{$2}=$3;
+                $rev_namespaces{$3}=$2;
+                local $new_level=length $1;
+                $new_level/=2;
+                local $firstline=1;
+                while( $current_level>=$new_level ) {
+                    # Close all pending open Elements
+                    if( $elements[$current_level] ) {
+                        print OUTFILE " "x($current_level*2) if !$firstline;
+
+                        if( $element_open ) {
+                            print OUTFILE " />\n";
+                            $element_open=0;
+                        } else {
+                            print OUTFILE "</$elements[$current_level]>\n";
+                        }
+                        $firstline=0;
+                    }
+                    --$current_level;
+                }
+
+                if( $element_open ) {
+                    # Close pending elements
+                    print OUTFILE ">\n";
+                    $element_open=0;
+                }
+
+                $new_level<=$current_level+1 or
+                        die("Jumped for level $current_level to $new_level in one go at $filename:$line_number");
+                $current_level=$new_level;
+                $elements[$new_level]="";
+                push( @schemas, "xmlns:$2=\"$3\"");
+            }
             when(/^( *)E: ([^ ]+)/) {
                 # Element
                 local $new_level=length $1;
