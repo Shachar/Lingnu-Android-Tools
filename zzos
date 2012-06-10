@@ -1557,7 +1557,7 @@ sub parse_dimen_value
         if( $string!~'^\s*\(fraction\) (\S+)%$' ) {
             die "Invalid fraction format: \"$string\"";
         }
-        printf $fileref "  <fraction name=\"$name\">%f%%</fraction>\n", $1;
+        printf $fileref "  <item type=\"dimen\" name=\"$name\">%f%%</item>\n", $1*100;
     } else {
         die "Unhandled dimen type $type: \"$string\"";
     }
