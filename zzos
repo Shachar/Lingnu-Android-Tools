@@ -1715,7 +1715,27 @@ sub write_plurals_item
     my $fileref = $type_files{plural};
 
     my($value,$type,$comment)=parse_content($string);
+    $value = add_format_index( $value );
     print $fileref "    <item quantity=\"$plural_references{$nameref}\">$value</item>\n";
+}
+
+sub add_format_index
+{
+    my $ret=$_[0];
+
+    # should we handle this at all?
+    if( $ret!~/%[sd].*%[sd]/ || $ret=~/%\d+\$[sd]/ )
+    {
+        return $ret;
+    }
+
+    my $i=1;
+    while( $ret=~/^(([^%]*%[^sd])*[^%]*)%([sd])(.*)$/ ) {
+        $ret="$1%$i\$$3$4";
+        ++$i;
+    }
+
+    return $ret;
 }
 
 sub write_plurals_close
