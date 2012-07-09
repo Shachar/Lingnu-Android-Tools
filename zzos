@@ -61,6 +61,8 @@ my %class_map=(
         fraction=>\&parse_fraction_value,
     );
 
+$REF_INVALID=   0x08000000;
+
 $REF_PUBLIC=    0x40000000;
 $REF_HARDCODE=  0x80000000;
 $REF_INTERNAL=  0x00000001;
@@ -272,6 +274,7 @@ sub read_resources
     my $state=0;
     my ($counter, $bag_index);
     my $bag, $bag_flags;
+    my $lastclass;
     while( <RESFILE> ) {
         chomp;
 
@@ -291,7 +294,7 @@ sub read_resources
                 }
             } elsif( m'^ *(spec )?resource 0x([0-9a-f]{8}) ([^:/]+):([^:/]+)/([^:]+): flags=0x([0-9a-f]+)' )
             {
-                ($index, $package, $str)=( hex($2), $3, "$4/$5");
+                ($index, $package, $str, $lastclass)=( hex($2), $3, "$4/$5", $4 );
 
                 if( $1 ) {
                     $flags|=$REF_SPEC;
@@ -344,6 +347,13 @@ sub read_resources
                     $state=1; # Start of bag
                     $bag_index = "$package:$str";
                 }
+            } elsif( m'^      INVALID TYPE CONFIG FOR RESOURCE 0x([0-9a-f]+)$' ) {
+                print STDERR "ERROR: Invalid type config for resource 0x$1: creating place holder\n";
+                # Just put something, and we'll most likely pad this later on
+                $index=hex($1);
+                $references{$index}=sprintf("%s:%s/INVALID%08x", $package_name, $lastclass, $index);
+                $references_flags{$index}=$REF_INVALID;
+                # Do not define the reverse mapping - we made up the name anyways
             } else {
             }
         } elsif( $state == 1 ) {
@@ -382,6 +392,8 @@ sub read_resources
                 }
                 $attrib_bags{$bag_index} = $bag;
             }
+        } else {
+            die "Unable to parse resource line \"$_\"";
         }
     }
 
