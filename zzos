@@ -312,24 +312,32 @@ sub read_resources
                     }
                 }
 
+                my $process=1;
                 if( exists $rev_references{"$package:$str"} ) {
-                    printf STDERR "Symbol 0x%08x has the same name as 0x%08x: $package:$str\n",
-                           $index, $rev_references{"$package:$str"};
+                    if( $rev_references{"$package:$str"} ne $index ) {
+                        printf STDERR "Symbol 0x%08x has the same name as 0x%08x: $package:$str\n",
+                            $index, $rev_references{"$package:$str"};
 
-                    # Search for a free name to use
-                    my( $ext, $i )=("___COPY", 1);
-                    while( exists $rev_references{"$package:$str$ext$i"} ) {
-                        ++$i;
+                        # Search for a free name to use
+                        my( $ext, $i )=("___COPY", 1);
+                        while( exists $rev_references{"$package:$str$ext$i"} ) {
+                            ++$i;
+                        }
+
+                        $str="$str$ext$i";
+                        $flags|=$REF_RENAMED|$REF_DUPLICATE;
+                    } else {
+                        # Symbol defined twice with same everything - ignore second time
+                        $process=0;
                     }
-
-                    $str="$str$ext$i";
-                    $flags|=$REF_RENAMED|$REF_DUPLICATE;
                 }
 
-                $references{$index}="$package:$str";
-                $rev_references{"$package:$str"}=$index;
+                if( $process ) {
+                    $references{$index}="$package:$str";
+                    $rev_references{"$package:$str"}=$index;
 
-                $references_flags{$index}=$flags;
+                    $references_flags{$index}=$flags;
+                }
             } elsif( m"(spec )?resource 0x([0-9a-f]{8}) ([-a-zA-Z\.]+):([^:/]+)/([^:]+): <bag>( \(PUBLIC\))?" )
             {
                 ($index, $package, $type, $str)=( hex($2), $3, $4, $5 );
@@ -1086,7 +1094,7 @@ sub dump_values
             $package_name=$1;
 
             $package_ext = $package_name eq $apk_package_name ? "" : ".$1";
-        } elsif( m'^ *config (\d+)( .*)?$' ) {
+        } elsif( m'^ *config (\d+|\(default\):)( .*)?$' ) {
             # Start of new configuration block
             close_pending_files(); # Close all open pending files
             $configname=parse_config_name($2);
@@ -1095,7 +1103,7 @@ sub dump_values
 
             die "Resource define non-package value" if $2 ne $package_name;
             die "First time defined with value" if !exists $references{hex($1)};
-            die "Inconsistent name of reference: $2:$3/$4 ne $references{hex($1)}"
+            die "Inconsistent name of reference: $1 $2:$3/$4 ne $references{hex($1)}"
                     if $references{hex($1)} ne "$2:$3/$4";
             ($class, $name, $type, $index)=( $3, $4, $5, hex($1) );
             $state = 1;
