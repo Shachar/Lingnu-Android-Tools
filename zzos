@@ -1094,10 +1094,20 @@ sub dump_values
             $package_name=$1;
 
             $package_ext = $package_name eq $apk_package_name ? "" : ".$1";
-        } elsif( m'^ *config (\d+|\(default\):)( .*)?$' ) {
+        } elsif( m'^ *config (\d+)( .*)?$' ) { # Old aapt output format
             # Start of new configuration block
+            print "found config $2\n";
             close_pending_files(); # Close all open pending files
             $configname=parse_config_name($2);
+        } elsif( m'^ *config (.*):$' ) { # New (jellybeans) aapt output format
+            # Start of new configuration block
+            print "Found config $1\n";
+            close_pending_files(); # Close all open pending files
+            if( "$1" eq "(default)" ) {
+                $configname="";
+            } else {
+                $configname="-".parse_config_name_new($1);
+            }
         } elsif( m'^ *resource 0x([0-9a-f]+) ([^:]+):([^/]+)/([^:]+): t=0x([0-9a-f]+)' ) {
             die "Unexpected resource value" if ! defined $configname;
 
@@ -1385,6 +1395,16 @@ sub parse_config_name
     }
 
     return $ret;
+}
+
+sub parse_config_name_new
+{
+    my ($string)=@_;
+
+    # Fix JB's aapt country resource to add the required "r"
+    $string=~s/^(.+-)?([a-z]{2})-([A-Z]{2})(-.+)?$/\1\2-r\3\4/;
+
+    return $string;
 }
 
 sub open_config_file
