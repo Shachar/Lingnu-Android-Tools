@@ -1404,6 +1404,10 @@ sub parse_config_name_new
     # Fix JB's aapt country resource to add the required "r"
     $string=~s/^(.+-)?([a-z]{2})-([A-Z]{2})(-.+)?$/\1\2-r\3\4/;
 
+    # Fix the mcc/mnc order
+    $string=~s/^(.+-)?([0-9]+)mcc(-.+)?$/\1mcc\2\3/;
+    $string=~s/^(.+-)?([0-9]+)mnc(-.+)?$/\1mnc\2\3/;
+
     return $string;
 }
 
