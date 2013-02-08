@@ -681,6 +681,10 @@ sub reparse_attrib
 
         # Attrib has either enum or flags, either way this code will handle it
         $ret=reparse_attrib_enum_flags($bag->{flags}, $attrib, $val);
+        if( ($bag_flags&0x00010000) == 0 and $val==0 and not defined $ret ) {
+            # These are flags, not enums, and the data is zero
+            $ret="";
+        }
 
         $bag_flags&= ~0x00030000;
     }
