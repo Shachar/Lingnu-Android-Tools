@@ -2129,7 +2129,10 @@ sub format_xml_styleref
 
     exists $translation->{$package} or
             die "Attribute $references{$index} belongs to undefined namespace";
-    $class eq "attr" or die "Style reference not to attribute $references{$index}";
+    if( $class ne "attr" ) {
+        print "Style reference not to attribute $references{$index}\n";
+        return "$references{$index}";
+    }
 
     return "$translation->{$package}:attr/$name";
 }
