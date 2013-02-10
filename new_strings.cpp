@@ -17,7 +17,32 @@ typedef struct {
     XML_Parser *parser;
     map<string,string> strings;
     string current_name;
+    bool formatted;
 } parser_context;
+
+std::string quote( const std::string & raw )
+{
+    std::string ret;
+
+    for( unsigned int i=0; i<raw.length(); ++i ) {
+        switch( raw[i] ) {
+        case '<':
+            ret+="&lt;";
+            break;
+        case '>':
+            ret+="&gt;";
+            break;
+        case '&':
+            ret+="&amp;";
+            break;
+        default:
+            ret+=raw[i];
+            break;
+        }
+    }
+
+    return ret;
+}
 
 void tag_content(void *userData, const XML_Char *s, int len)
 {
@@ -27,7 +52,7 @@ void tag_content(void *userData, const XML_Char *s, int len)
     parser_context* context = (parser_context*)userData;
 
     if (context->current_name.size() > 0)
-	context->strings[context->current_name] = str;
+	context->strings[context->current_name] += str;
 }
 
 void tag_start(void *userData, const XML_Char *name, const XML_Char **atts)
@@ -40,7 +65,9 @@ void tag_start(void *userData, const XML_Char *name, const XML_Char **atts)
 	else if ((strcmp(atts[idx], "translatable") == 0) &&
 		 (strcmp(atts[idx+1], "false") == 0))
 	    return;  // ignore not translatable strings
-	else 
+	else if (strcmp(atts[idx], "formatted") == 0 )
+            context->formatted = strcmp(atts[idx+1], "false")!=0;
+        else 
 	    {
 		cerr<<"unknown attribute '"<<atts[idx]<<"' for element <string>"<<endl;
 		exit(1);
@@ -75,6 +102,7 @@ void parse_strings_xml(char* filename, map<string, string>& string_map)
     parser_context context;
     context.parser = &p;
     context.strings = string_map;
+    context.formatted = true;
 
     XML_SetElementHandler(p, tag_start, tag_end);
     XML_SetUserData(p, &context);
@@ -133,14 +161,15 @@ int merge2(char * old_strings_iw_file, char * new_strings_iw_file)
     for(p = old_strings_iw.begin(); p != old_strings_iw.end(); p++) {
 	
 	if ( new_strings_iw.find(p->first) != new_strings_iw.end() ) {
-	    cout<<"<string name=\""<<p->first<<"\">"<<new_strings_iw[p->first]<<"</string>"<<endl;
+	    cout<<"<string name=\""<<p->first<<"\">"<<quote(new_strings_iw[p->first])<<
+                    "</string>"<<endl;
 	    new_strings_iw.erase(p->first);
 	} else
-	    cout<<"<string name=\""<<p->first<<"\">"<<p->second<<"</string>"<<endl;	    
+	    cout<<"<string name=\""<<p->first<<"\">"<<quote(p->second)<<"</string>"<<endl;	    
     }    
     
     for(p = new_strings_iw.begin(); p != new_strings_iw.end(); p++)
-	cout<<"<string name=\""<<p->first<<"\">"<<p->second<<"</string>"<<endl;
+	cout<<"<string name=\""<<p->first<<"\">"<<quote(p->second)<<"</string>"<<endl;
 
     cout<<"</resources>"<<endl;
 
