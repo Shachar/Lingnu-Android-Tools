@@ -161,15 +161,17 @@ int merge2(char * old_strings_iw_file, char * new_strings_iw_file)
     for(p = old_strings_iw.begin(); p != old_strings_iw.end(); p++) {
 	
 	if ( new_strings_iw.find(p->first) != new_strings_iw.end() ) {
-	    cout<<"<string name=\""<<p->first<<"\">"<<quote(new_strings_iw[p->first])<<
-                    "</string>"<<endl;
+	    cout<<"<string name=\""<<p->first<<"\" formatted=\"false\">"<<
+                    quote(new_strings_iw[p->first])<<"</string>"<<endl;
 	    new_strings_iw.erase(p->first);
 	} else
-	    cout<<"<string name=\""<<p->first<<"\">"<<quote(p->second)<<"</string>"<<endl;	    
+	    cout<<"<string name=\""<<p->first<<"\" formatted=\"false\">"<<
+                    quote(p->second)<<"</string>"<<endl;
     }    
     
     for(p = new_strings_iw.begin(); p != new_strings_iw.end(); p++)
-	cout<<"<string name=\""<<p->first<<"\">"<<quote(p->second)<<"</string>"<<endl;
+	cout<<"<string name=\""<<p->first<<"\" formatted=\"false\">"<<
+                quote(p->second)<<"</string>"<<endl;
 
     cout<<"</resources>"<<endl;
 
