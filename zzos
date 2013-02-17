@@ -1603,7 +1603,7 @@ sub parse_dimen_value
 
         die "Invalid reference 0x$1" if !exists $references{hex($1)};
 
-        print $fileref "  <dimen name=\"$name\">@".$references{hex($1)}."</dimen>\n";
+        print $fileref "  <dimen name=\"$name\">@".format_reference(hex($1))."</dimen>\n";
     } elsif( $type==5 ) {
         # Processed dimension
         if( $string!~'^\s*\(dimension\) (\S+)$' ) {
