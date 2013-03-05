@@ -831,7 +831,7 @@ sub parse_type_5
         when(0) { };                        # Integer
         when(1) { $value/=128 };            # Fix point 7 bit shift
         when(2) { $value/=32768 };          # Fix point 15 bit shift
-        when(3) { $value/=8,388,608 };      # Fix point 23 bit shift
+        when(3) { $value/=8388608 };      # Fix point 23 bit shift
     }
 
     return "$value$unit";
